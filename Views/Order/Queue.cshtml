@@ -1,0 +1,122 @@
+@model IEnumerable<PrintShop.Models.PrintOrder>
+@{
+    ViewData["Title"] = "Painel da Papelaria";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Painel de Pedidos</h1>
+    <p>Fila de impressão em tempo real.</p>
+</div>
+
+<div class="queue-stats">
+    <div class="stat">
+        <strong>@Model.Count(o => o.Status == PrintShop.Models.OrderStatus.Printing || o.Status == PrintShop.Models.OrderStatus.PaymentConfirmed)</strong>
+        <span>Na fila</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.Count(o => o.Status == PrintShop.Models.OrderStatus.Ready)</strong>
+        <span>Prontos</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.Count()</strong>
+        <span>Total hoje</span>
+    </div>
+    <div class="stat">
+        <strong>R$ @Model.Where(o => o.PaymentConfirmed).Sum(o => o.TotalPrice).ToString("F2")</strong>
+        <span>Faturamento</span>
+    </div>
+</div>
+
+<div class="queue-table-wrapper">
+    @if (!Model.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>Nenhum pedido ainda. Quando chegarem, aparecerão aqui.</p>
+        </div>
+    }
+    else
+    {
+        <table class="queue-table">
+            <thead>
+                <tr>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th>Arquivos</th>
+                    <th>Opções</th>
+                    <th>Pagamento</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Model)
+                {
+                    <tr class="queue-row @order.Status.ToString().ToLower()">
+                        <td>
+                            <strong>#@order.Id</strong>
+                            <small>@order.CreatedAt.ToString("HH:mm")</small>
+                        </td>
+                        <td>
+                            <div>@order.CustomerName</div>
+                            <small>@order.CustomerPhone</small>
+                        </td>
+                        <td>
+                            @foreach (var f in order.Files)
+                            {
+                                <div class="file-tag">@f.OriginalName</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="option-tags">
+                                <span class="tag">@(order.Color == PrintShop.Models.PrintColor.Color ? "Colorido" : "P&B")</span>
+                                <span class="tag">@order.Copies× cópias</span>
+                                <span class="tag">@order.PaperType.ToString().Replace("_"," ")</span>
+                                @if (order.Laminate) { <span class="tag highlight">Plastificado</span> }
+                                @if (order.Sides == PrintShop.Models.PrintSides.BothSides) { <span class="tag">F/V</span> }
+                            </div>
+                        </td>
+                        <td>@(order.PaymentMethod == PrintShop.Models.PaymentMethod.Pix ? "PIX" : "Na loja")</td>
+                        <td><strong>R$ @order.TotalPrice.ToString("F2")</strong></td>
+                        <td>
+                            <span class="status-pill @order.Status.ToString().ToLower()">
+                                @GetStatusLabel(order.Status)
+                            </span>
+                        </td>
+                        <td>
+                            @if (order.Status == PrintShop.Models.OrderStatus.Printing ||
+                                 order.Status == PrintShop.Models.OrderStatus.PaymentConfirmed)
+                            {
+                                <form action="/Order/MarkReady" method="post">
+                                    <input type="hidden" name="id" value="@order.Id" />
+                                    <button type="submit" class="btn-action">✓ Pronto</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@section Scripts {
+<script>
+// Auto-refresh a cada 15 segundos
+setTimeout(() => location.reload(), 15000);
+</script>
+}
+
+@functions {
+    string GetStatusLabel(PrintShop.Models.OrderStatus status) => status switch {
+        PrintShop.Models.OrderStatus.PendingPayment => "⏳ Aguardando pag.",
+        PrintShop.Models.OrderStatus.PaymentConfirmed => "💳 Pago",
+        PrintShop.Models.OrderStatus.Printing => "🖨️ Imprimindo",
+        PrintShop.Models.OrderStatus.Ready => "✅ Pronto",
+        PrintShop.Models.OrderStatus.Delivered => "📦 Entregue",
+        PrintShop.Models.OrderStatus.Cancelled => "❌ Cancelado",
+        _ => status.ToString()
+    };
+}

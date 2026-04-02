@@ -1,0 +1,17 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\bin",
+    "\\bin\\Debug",
+    "\\bin\\Debug\\net8.0",
+    "\\bin\\Debug\\net8.0\\runtimes",
+    "\\bin\\Debug\\net8.0\\runtimes\\any",
+    "\\bin\\Debug\\net8.0\\wwwroot",
+    "\\bin\\Debug\\net8.0\\wwwroot\\uploads",
+    "\\Views",
+    "\\Views\\Home",
+    "\\Views\\Shared"
+  ],
+  "SelectedNode": "\\bin\\Debug\\net8.0\\wwwroot\\uploads",
+  "PreviewInSolutionExplorer": false
+}

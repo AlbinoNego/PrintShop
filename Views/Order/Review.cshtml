@@ -1,0 +1,105 @@
+@model PrintShop.Models.PrintOrder
+@using PrintShop.Services
+@{
+    ViewData["Title"] = "Revisar Pedido";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var breakdown = (PriceBreakdown)ViewBag.Breakdown;
+}
+
+<div class="page-header">
+    <h1>Revisar Pedido <span class="order-badge">#@Model.Id</span></h1>
+    <p>Confira os detalhes antes de prosseguir para o pagamento.</p>
+</div>
+
+<div class="review-layout">
+
+    <div class="review-main">
+        <!-- Arquivos -->
+        <div class="review-card">
+            <h3>📁 Arquivos (@Model.Files.Count)</h3>
+            @foreach (var file in Model.Files)
+            {
+                <div class="review-file">
+                    <span>@file.OriginalName</span>
+                    <span class="muted">~@file.PageCount pág.</span>
+                </div>
+            }
+        </div>
+
+        <!-- Opções -->
+        <div class="review-card">
+            <h3>🖨️ Configurações</h3>
+            <div class="review-options">
+                <div class="review-row">
+                    <span>Cor</span>
+                    <strong>@(Model.Color == PrintShop.Models.PrintColor.Color ? "Colorido" : "Preto e Branco")</strong>
+                </div>
+                <div class="review-row">
+                    <span>Lados</span>
+                    <strong>@(Model.Sides == PrintShop.Models.PrintSides.BothSides ? "Frente e verso" : "Apenas frente")</strong>
+                </div>
+                <div class="review-row">
+                    <span>Papel</span>
+                    <strong>@Model.PaperType.ToString().Replace("_", " ")</strong>
+                </div>
+                <div class="review-row">
+                    <span>Cópias</span>
+                    <strong>@Model.Copies</strong>
+                </div>
+                <div class="review-row">
+                    <span>Plastificação</span>
+                    <strong>@(Model.Laminate ? "Sim" : "Não")</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumo de preço -->
+    <div class="price-sidebar">
+        <div class="price-card">
+            <h3>Resumo de Preço</h3>
+            <div class="price-breakdown">
+                <div class="price-row">
+                    <span>Total de páginas</span>
+                    <span>@breakdown.TotalPages pág.</span>
+                </div>
+                <div class="price-row">
+                    <span>Preço por página</span>
+                    <span>R$ @breakdown.PricePerPage.ToString("F2")</span>
+                </div>
+                <div class="price-row">
+                    <span>Cópias</span>
+                    <span>× @Model.Copies</span>
+                </div>
+                @if (Model.Sides == PrintShop.Models.PrintSides.BothSides)
+                {
+                    <div class="price-row discount">
+                        <span>Desconto frente/verso</span>
+                        <span>−20%</span>
+                    </div>
+                }
+                <div class="price-row">
+                    <span>Subtotal impressão</span>
+                    <span>R$ @breakdown.PrintSubtotal.ToString("F2")</span>
+                </div>
+                @if (Model.Laminate)
+                {
+                    <div class="price-row">
+                        <span>Plastificação</span>
+                        <span>R$ @breakdown.LaminateSubtotal.ToString("F2")</span>
+                    </div>
+                }
+                <div class="price-total">
+                    <span>Total</span>
+                    <span>R$ @Model.TotalPrice.ToString("F2")</span>
+                </div>
+            </div>
+
+            <a href="/Order/Payment/@Model.Id" class="btn-primary btn-full">
+                Ir para pagamento →
+            </a>
+            <a href="/Order/New" class="btn-ghost btn-full">← Voltar e editar</a>
+        </div>
+    </div>
+
+</div>

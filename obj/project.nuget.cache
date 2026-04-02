@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "dgSpecHash": "mxSdtmU8yIU=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\cryst\\Downloads\\PrintShop\\PrintShop.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\cryst\\.nuget\\packages\\microsoft.aspnetcore.jsonpatch\\8.0.0\\microsoft.aspnetcore.jsonpatch.8.0.0.nupkg.sha512",
+    "C:\\Users\\cryst\\.nuget\\packages\\microsoft.aspnetcore.mvc.newtonsoftjson\\8.0.0\\microsoft.aspnetcore.mvc.newtonsoftjson.8.0.0.nupkg.sha512",
+    "C:\\Users\\cryst\\.nuget\\packages\\microsoft.csharp\\4.7.0\\microsoft.csharp.4.7.0.nupkg.sha512",
+    "C:\\Users\\cryst\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
+    "C:\\Users\\cryst\\.nuget\\packages\\newtonsoft.json.bson\\1.0.2\\newtonsoft.json.bson.1.0.2.nupkg.sha512"
+  ],
+  "logs": []
+}
