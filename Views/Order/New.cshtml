@@ -1,0 +1,195 @@
+@{
+    ViewData["Title"] = "Novo Pedido";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Novo Pedido</h1>
+    <p>Preencha os dados abaixo para enviar seus arquivos para impressão.</p>
+</div>
+
+<form action="/Order/Upload" method="post" enctype="multipart/form-data" class="order-form" id="orderForm">
+
+    <!-- PASSO 1: Arquivos -->
+    <div class="form-section">
+        <div class="section-label"><span>01</span> Seus arquivos</div>
+        <div class="upload-zone" id="uploadZone">
+            <input type="file" name="files" id="fileInput" multiple
+                   accept=".pdf,.docx,.doc,.pptx,.ppt,.jpg,.jpeg,.png"
+                   class="file-input" />
+            <div class="upload-placeholder" id="uploadPlaceholder">
+                <div class="upload-icon">↑</div>
+                <strong>Arraste arquivos aqui</strong>
+                <span>ou clique para selecionar</span>
+                <small>PDF · Word · PowerPoint · JPG · PNG — máx 50MB por arquivo</small>
+            </div>
+            <div class="file-list" id="fileList"></div>
+        </div>
+    </div>
+
+    <!-- PASSO 2: Opções de impressão -->
+    <div class="form-section">
+        <div class="section-label"><span>02</span> Opções de impressão</div>
+
+        <div class="options-grid">
+
+            <div class="option-group">
+                <label>Cor</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt active">
+                        <input type="radio" name="color" value="BlackAndWhite" checked />
+                        <span>Preto e Branco</span>
+                    </label>
+                    <label class="toggle-opt">
+                        <input type="radio" name="color" value="Color" />
+                        <span>Colorido</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="option-group">
+                <label>Lados</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt active">
+                        <input type="radio" name="sides" value="OneSide" checked />
+                        <span>Apenas frente</span>
+                    </label>
+                    <label class="toggle-opt">
+                        <input type="radio" name="sides" value="BothSides" />
+                        <span>Frente e verso</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="option-group">
+                <label for="paperType">Tipo de papel</label>
+                <select name="paperType" id="paperType" class="select-input">
+                    <option value="A4_75g">A4 75g — padrão</option>
+                    <option value="A4_90g">A4 90g — mais encorpado (+R$0,20/pág)</option>
+                    <option value="A3_75g">A3 75g — tamanho grande (+R$0,50/pág)</option>
+                    <option value="Glossy">Fotográfico brilhante (+R$1,00/pág)</option>
+                </select>
+            </div>
+
+            <div class="option-group">
+                <label for="copies">Número de cópias</label>
+                <div class="counter">
+                    <button type="button" class="counter-btn" onclick="changeCopies(-1)">−</button>
+                    <input type="number" name="copies" id="copies" value="1" min="1" max="100" class="counter-input" />
+                    <button type="button" class="counter-btn" onclick="changeCopies(1)">+</button>
+                </div>
+            </div>
+
+            <div class="option-group full-width">
+                <label>Plastificação</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt active">
+                        <input type="radio" name="laminate" value="false" checked />
+                        <span>Sem plastificação</span>
+                    </label>
+                    <label class="toggle-opt">
+                        <input type="radio" name="laminate" value="true" />
+                        <span>Com plastificação (+R$3,50/folha)</span>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- PASSO 3: Dados do cliente -->
+    <div class="form-section">
+        <div class="section-label"><span>03</span> Seus dados</div>
+        <div class="fields-row">
+            <div class="field">
+                <label for="customerName">Nome completo</label>
+                <input type="text" name="customerName" id="customerName"
+                       placeholder="João Silva" required class="text-input" />
+            </div>
+            <div class="field">
+                <label for="customerPhone">WhatsApp / Telefone</label>
+                <input type="tel" name="customerPhone" id="customerPhone"
+                       placeholder="(69) 99999-9999" class="text-input" />
+            </div>
+        </div>
+    </div>
+
+    <div class="form-footer">
+        <button type="submit" class="btn-primary btn-lg" id="submitBtn" disabled>
+            Revisar pedido →
+        </button>
+        <p class="form-hint">O valor exato será calculado na próxima tela.</p>
+    </div>
+
+</form>
+
+@section Scripts {
+<script>
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const fileList = document.getElementById('fileList');
+const submitBtn = document.getElementById('submitBtn');
+let selectedFiles = new DataTransfer();
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    addFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+function addFiles(files) {
+    for (const f of files) selectedFiles.items.add(f);
+    fileInput.files = selectedFiles.files;
+    renderFileList();
+}
+
+function removeFile(index) {
+    const dt = new DataTransfer();
+    Array.from(selectedFiles.files).forEach((f, i) => { if (i !== index) dt.items.add(f); });
+    selectedFiles = dt;
+    fileInput.files = selectedFiles.files;
+    renderFileList();
+}
+
+function renderFileList() {
+    const files = Array.from(selectedFiles.files);
+    submitBtn.disabled = files.length === 0;
+    fileList.innerHTML = files.map((f, i) => `
+        <div class="file-item">
+            <span class="file-icon">${getIcon(f.name)}</span>
+            <div class="file-info">
+                <strong>${f.name}</strong>
+                <small>${(f.size / 1024).toFixed(0)} KB</small>
+            </div>
+            <button type="button" class="file-remove" onclick="removeFile(${i})">✕</button>
+        </div>
+    `).join('');
+}
+
+function getIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    return { pdf: '📄', docx: '📝', doc: '📝', pptx: '📊', ppt: '📊', jpg: '🖼', jpeg: '🖼', png: '🖼' }[ext] || '📎';
+}
+
+// Toggle buttons
+document.querySelectorAll('.toggle-group').forEach(group => {
+    group.querySelectorAll('.toggle-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+            group.querySelectorAll('.toggle-opt').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+        });
+    });
+});
+
+function changeCopies(delta) {
+    const input = document.getElementById('copies');
+    const val = parseInt(input.value) + delta;
+    input.value = Math.max(1, Math.min(100, val));
+}
+</script>
+}

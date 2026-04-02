@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — PrintShop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/css/site.css" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="brand">
+            <span class="brand-icon">◈</span>
+            <span>PrintShop</span>
+        </a>
+        <div class="nav-links">
+            <a href="/Order/New">Novo Pedido</a>
+            <a href="/Order/Queue" class="btn-queue">Painel</a>
+        </div>
+    </nav>
+
+    <main>
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-error">⚠ @TempData["Error"]</div>
+        }
+        @RenderBody()
+    </main>
+
+    <footer>
+        <p>PrintShop &copy; @DateTime.Now.Year — Sistema de Impressão Online</p>
+    </footer>
+
+    <script src="~/js/site.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
