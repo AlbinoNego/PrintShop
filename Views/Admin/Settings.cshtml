@@ -1,0 +1,110 @@
+@model PrintShop.Models.AdminSettings
+@using System.Globalization
+@{
+    ViewData["Title"] = "Configuracoes";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var printers = ViewBag.Printers as List<string> ?? new List<string>();
+}
+
+<div class="page-header">
+    <h1>Configuracoes</h1>
+    <p>Controle impressoras, impressao automatica e precos usados nos novos pedidos.</p>
+</div>
+
+<form action="/Admin/Settings" method="post" class="admin-settings-form">
+    <div class="review-layout">
+        <div class="review-main">
+            <div class="review-card">
+                <h3>Impressoras</h3>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="DefaultPrinter">Impressora padrao</label>
+                        <input class="text-input" list="printers" name="DefaultPrinter" id="DefaultPrinter" value="@Model.DefaultPrinter" />
+                    </div>
+                    <div class="field">
+                        <label for="PdfPrinter">PDF</label>
+                        <input class="text-input" list="printers" name="PdfPrinter" id="PdfPrinter" value="@Model.PdfPrinter" />
+                    </div>
+                </div>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="WordPrinter">Word</label>
+                        <input class="text-input" list="printers" name="WordPrinter" id="WordPrinter" value="@Model.WordPrinter" />
+                    </div>
+                    <div class="field">
+                        <label for="PowerPointPrinter">PowerPoint</label>
+                        <input class="text-input" list="printers" name="PowerPointPrinter" id="PowerPointPrinter" value="@Model.PowerPointPrinter" />
+                    </div>
+                </div>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="ImagePrinter">Imagens</label>
+                        <input class="text-input" list="printers" name="ImagePrinter" id="ImagePrinter" value="@Model.ImagePrinter" />
+                    </div>
+                    <div class="field checkbox-field">
+                        <label>
+                            <input type="checkbox" name="AutomaticPrintingEnabled" value="true" @(Model.AutomaticPrintingEnabled ? "checked" : "") />
+                            Impressao automatica ativada
+                        </label>
+                        <input type="hidden" name="AutomaticPrintingEnabled" value="false" />
+                    </div>
+                </div>
+
+                <datalist id="printers">
+                    @foreach (var printer in printers)
+                    {
+                        <option value="@printer"></option>
+                    }
+                </datalist>
+            </div>
+
+            <div class="review-card">
+                <h3>Precos</h3>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="BlackAndWhitePrice">Preto e branco por pagina</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="BlackAndWhitePrice" id="BlackAndWhitePrice" value="@Model.BlackAndWhitePrice.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                    <div class="field">
+                        <label for="ColorPrice">Colorido por pagina</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="ColorPrice" id="ColorPrice" value="@Model.ColorPrice.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                </div>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="A4_90gExtra">Adicional A4 90g</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="A4_90gExtra" id="A4_90gExtra" value="@Model.A4_90gExtra.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                    <div class="field">
+                        <label for="A3_75gExtra">Adicional A3 75g</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="A3_75gExtra" id="A3_75gExtra" value="@Model.A3_75gExtra.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                </div>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="GlossyExtra">Adicional fotografico</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="GlossyExtra" id="GlossyExtra" value="@Model.GlossyExtra.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                    <div class="field">
+                        <label for="LaminatePrice">Plastificacao por folha</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="LaminatePrice" id="LaminatePrice" value="@Model.LaminatePrice.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                </div>
+                <div class="fields-row">
+                    <div class="field">
+                        <label for="DeliveryFee">Taxa de entrega</label>
+                        <input class="text-input" type="number" step="0.01" min="0" name="DeliveryFee" id="DeliveryFee" value="@Model.DeliveryFee.ToString("0.00", CultureInfo.InvariantCulture)" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="price-sidebar">
+            <div class="price-card">
+                <h3>Acoes</h3>
+                <button type="submit" class="btn-primary btn-full">Salvar configuracoes</button>
+                <a href="/Order/Queue" class="btn-ghost btn-full">Voltar ao painel</a>
+            </div>
+        </div>
+    </div>
+</form>

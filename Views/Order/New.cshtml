@@ -1,0 +1,371 @@
+@using PrintShop.Models
+@{
+    ViewData["Title"] = "Novo Pedido";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var editOrder = ViewBag.EditOrder as PrintOrder;
+    var settings = ViewBag.AdminSettings as AdminSettings ?? new AdminSettings();
+    var isEditing = editOrder != null;
+}
+
+<div class="page-header">
+    <h1>Novo Pedido</h1>
+    <p>Preencha os dados abaixo para enviar seus arquivos para impressão.</p>
+</div>
+
+<form action="/Order/Upload" method="post" enctype="multipart/form-data" class="order-form" id="orderForm">
+    <input type="hidden" name="existingOrderId" value="@editOrder?.Id" />
+    <div id="removedFiles"></div>
+
+    <!-- PASSO 1: Arquivos -->
+    <div class="form-section">
+        <div class="section-label"><span>01</span> Seus arquivos</div>
+        <div class="upload-zone" id="uploadZone">
+            <input type="file" name="files" id="fileInput" multiple
+                   accept=".pdf,.docx,.doc,.pptx,.ppt,.jpg,.jpeg,.png"
+                   class="file-input" />
+            <div class="upload-placeholder" id="uploadPlaceholder">
+                <div class="upload-icon">↑</div>
+                <strong>Arraste arquivos aqui</strong>
+                <span>ou clique para selecionar</span>
+                <small>PDF · Word · PowerPoint · JPG · PNG — máx 50MB por arquivo</small>
+            </div>
+            @if (isEditing && editOrder!.Files.Count > 0)
+            {
+                <div class="file-list">
+                    @foreach (var file in editOrder.Files)
+                    {
+                        <div class="file-item existing-file" data-file-id="@file.Id">
+                            <span class="file-icon">📄</span>
+                            <div class="file-info">
+                                <strong>@file.OriginalName</strong>
+                                <small>@file.PageCount pág. já enviado</small>
+                            </div>
+                            <button type="button" class="file-remove" onclick="event.stopPropagation(); removeExistingFile(@file.Id)">✕</button>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="file-list" id="fileList"></div>
+        </div>
+    </div>
+
+    <!-- PASSO 2: Opções de impressão -->
+    <div class="form-section">
+        <div class="section-label"><span>02</span> Opções de impressão</div>
+
+        <div class="options-grid">
+
+            <div class="option-group">
+                <label>Cor</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt @(editOrder?.Color != PrintColor.Color ? "active" : "")">
+                        <input type="radio" name="color" value="BlackAndWhite" @(editOrder?.Color != PrintColor.Color ? "checked" : "") />
+                        <span>Preto e Branco</span>
+                    </label>
+                    <label class="toggle-opt @(editOrder?.Color == PrintColor.Color ? "active" : "")">
+                        <input type="radio" name="color" value="Color" @(editOrder?.Color == PrintColor.Color ? "checked" : "") />
+                        <span>Colorido</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="option-group">
+                <label>Lados</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt @(editOrder?.Sides != PrintSides.BothSides ? "active" : "")">
+                        <input type="radio" name="sides" value="OneSide" @(editOrder?.Sides != PrintSides.BothSides ? "checked" : "") />
+                        <span>Apenas frente</span>
+                    </label>
+                    <label class="toggle-opt @(editOrder?.Sides == PrintSides.BothSides ? "active" : "")">
+                        <input type="radio" name="sides" value="BothSides" @(editOrder?.Sides == PrintSides.BothSides ? "checked" : "") />
+                        <span>Frente e verso</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="option-group">
+                <label for="paperType">Tipo de papel</label>
+                <select name="paperType" id="paperType" class="select-input">
+                    @if (editOrder?.PaperType == PaperType.A4_90g)
+                    {
+                        <option value="A4_75g">A4 75g — padrão</option>
+                        <option value="A4_90g" selected>A4 90g — mais encorpado (+R$@settings.A4_90gExtra.ToString("F2")/pág)</option>
+                        <option value="A3_75g">A3 75g — tamanho grande (+R$@settings.A3_75gExtra.ToString("F2")/pág)</option>
+                        <option value="Glossy">Fotográfico brilhante (+R$@settings.GlossyExtra.ToString("F2")/pág)</option>
+                    }
+                    else if (editOrder?.PaperType == PaperType.A3_75g)
+                    {
+                        <option value="A4_75g">A4 75g — padrão</option>
+                        <option value="A4_90g">A4 90g — mais encorpado (+R$@settings.A4_90gExtra.ToString("F2")/pág)</option>
+                        <option value="A3_75g" selected>A3 75g — tamanho grande (+R$@settings.A3_75gExtra.ToString("F2")/pág)</option>
+                        <option value="Glossy">Fotográfico brilhante (+R$@settings.GlossyExtra.ToString("F2")/pág)</option>
+                    }
+                    else if (editOrder?.PaperType == PaperType.Glossy)
+                    {
+                        <option value="A4_75g">A4 75g — padrão</option>
+                        <option value="A4_90g">A4 90g — mais encorpado (+R$@settings.A4_90gExtra.ToString("F2")/pág)</option>
+                        <option value="A3_75g">A3 75g — tamanho grande (+R$@settings.A3_75gExtra.ToString("F2")/pág)</option>
+                        <option value="Glossy" selected>Fotográfico brilhante (+R$@settings.GlossyExtra.ToString("F2")/pág)</option>
+                    }
+                    else
+                    {
+                        <option value="A4_75g" selected>A4 75g — padrão</option>
+                        <option value="A4_90g">A4 90g — mais encorpado (+R$@settings.A4_90gExtra.ToString("F2")/pág)</option>
+                        <option value="A3_75g">A3 75g — tamanho grande (+R$@settings.A3_75gExtra.ToString("F2")/pág)</option>
+                        <option value="Glossy">Fotográfico brilhante (+R$@settings.GlossyExtra.ToString("F2")/pág)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="option-group">
+                <label for="copies">Número de cópias</label>
+                <div class="counter">
+                    <button type="button" class="counter-btn" onclick="changeCopies(-1)">−</button>
+                    <input type="number" name="copies" id="copies" value="@(editOrder?.Copies ?? 1)" min="1" max="100" class="counter-input" />
+                    <button type="button" class="counter-btn" onclick="changeCopies(1)">+</button>
+                </div>
+            </div>
+
+            <div class="option-group full-width">
+                <label>Plastificação</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt @(editOrder?.Laminate == true ? "" : "active")">
+                        <input type="radio" name="laminate" value="false" @(editOrder?.Laminate == true ? "" : "checked") />
+                        <span>Sem plastificação</span>
+                    </label>
+                    <label class="toggle-opt @(editOrder?.Laminate == true ? "active" : "")">
+                        <input type="radio" name="laminate" value="true" @(editOrder?.Laminate == true ? "checked" : "") />
+                        <span>Com plastificação (+R$@settings.LaminatePrice.ToString("F2")/folha)</span>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- PASSO 3: Dados do cliente -->
+    <div class="form-section">
+        <div class="section-label"><span>03</span> Retirada ou entrega</div>
+        <div class="option-group full-width">
+            <label>Como deseja receber</label>
+            <div class="toggle-group">
+                <label class="toggle-opt @(editOrder?.FulfillmentMethod == FulfillmentMethod.Delivery ? "" : "active")">
+                    <input type="radio" name="fulfillmentMethod" value="Pickup" @(editOrder?.FulfillmentMethod == FulfillmentMethod.Delivery ? "" : "checked") />
+                    <span>Retirar na loja</span>
+                </label>
+                <label class="toggle-opt @(editOrder?.FulfillmentMethod == FulfillmentMethod.Delivery ? "active" : "")">
+                    <input type="radio" name="fulfillmentMethod" value="Delivery" @(editOrder?.FulfillmentMethod == FulfillmentMethod.Delivery ? "checked" : "") />
+                    <span>Entregar em casa (+R$@settings.DeliveryFee.ToString("F2"))</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="delivery-fields" id="deliveryFields">
+            <div class="fields-row">
+                <div class="field">
+                    <label for="deliveryAddress">Endereco</label>
+                    <input type="text" name="deliveryAddress" id="deliveryAddress"
+                           placeholder="Rua, avenida ou travessa" value="@editOrder?.DeliveryAddress" class="text-input" />
+                </div>
+                <div class="field">
+                    <label for="deliveryNumber">Numero</label>
+                    <input type="text" name="deliveryNumber" id="deliveryNumber"
+                           placeholder="123" value="@editOrder?.DeliveryNumber" class="text-input" />
+                </div>
+            </div>
+            <div class="fields-row">
+                <div class="field">
+                    <label for="deliveryNeighborhood">Bairro</label>
+                    <input type="text" name="deliveryNeighborhood" id="deliveryNeighborhood"
+                           placeholder="Centro" value="@editOrder?.DeliveryNeighborhood" class="text-input" />
+                </div>
+                <div class="field">
+                    <label for="deliveryComplement">Complemento</label>
+                    <input type="text" name="deliveryComplement" id="deliveryComplement"
+                           placeholder="Apartamento, referencia, bloco" value="@editOrder?.DeliveryComplement" class="text-input" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASSO 4: Dados do cliente -->
+    <div class="form-section">
+        <div class="section-label"><span>04</span> Seus dados</div>
+        <div class="fields-row">
+            <div class="field">
+                <label for="customerName">Nome completo</label>
+                <input type="text" name="customerName" id="customerName"
+                       placeholder="João Silva" value="@editOrder?.CustomerName" required class="text-input" />
+            </div>
+            <div class="field">
+                <label for="customerPhone">WhatsApp / Telefone</label>
+                <input type="tel" name="customerPhone" id="customerPhone"
+                       placeholder="(69) 99999-9999" value="@editOrder?.CustomerPhone" required class="text-input" />
+            </div>
+        </div>
+    </div>
+
+    <div class="form-footer">
+        <button type="submit" class="btn-primary btn-lg" id="submitBtn" @(isEditing ? "" : "disabled")>
+            Revisar pedido →
+        </button>
+        <p class="form-hint">O valor exato será calculado na próxima tela.</p>
+    </div>
+
+</form>
+
+@section Scripts {
+<script>
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const fileList = document.getElementById('fileList');
+const submitBtn = document.getElementById('submitBtn');
+const removedFiles = document.getElementById('removedFiles');
+const draftKey = 'printshop:new-order-draft';
+let remainingExistingFiles = @(isEditing ? editOrder!.Files.Count : 0);
+const isEditingExistingOrder = @(isEditing ? "true" : "false");
+let selectedFiles = new DataTransfer();
+
+uploadZone.addEventListener('click', e => {
+    if (e.target.closest('.file-remove')) return;
+    fileInput.click();
+});
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    addFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+function addFiles(files) {
+    for (const f of files) selectedFiles.items.add(f);
+    fileInput.files = selectedFiles.files;
+    renderFileList();
+}
+
+function removeFile(index) {
+    const dt = new DataTransfer();
+    Array.from(selectedFiles.files).forEach((f, i) => { if (i !== index) dt.items.add(f); });
+    selectedFiles = dt;
+    fileInput.files = selectedFiles.files;
+    renderFileList();
+}
+
+function removeExistingFile(fileId) {
+    const item = document.querySelector(`.existing-file[data-file-id="${fileId}"]`);
+    if (item) item.remove();
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'removedFileIds';
+    input.value = fileId;
+    removedFiles.appendChild(input);
+
+    remainingExistingFiles = Math.max(0, remainingExistingFiles - 1);
+    updateSubmitState();
+}
+
+function renderFileList() {
+    const files = Array.from(selectedFiles.files);
+    updateSubmitState();
+    fileList.innerHTML = files.map((f, i) => `
+        <div class="file-item">
+            <span class="file-icon">${getIcon(f.name)}</span>
+            <div class="file-info">
+                <strong>${f.name}</strong>
+                <small>${(f.size / 1024).toFixed(0)} KB</small>
+            </div>
+            <button type="button" class="file-remove" onclick="event.stopPropagation(); removeFile(${i})">✕</button>
+        </div>
+    `).join('');
+}
+
+function updateSubmitState() {
+    submitBtn.disabled = selectedFiles.files.length === 0 && remainingExistingFiles === 0;
+}
+
+function getIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    return { pdf: '📄', docx: '📝', doc: '📝', pptx: '📊', ppt: '📊', jpg: '🖼', jpeg: '🖼', png: '🖼' }[ext] || '📎';
+}
+
+// Toggle buttons
+document.querySelectorAll('.toggle-group').forEach(group => {
+    group.querySelectorAll('.toggle-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+            group.querySelectorAll('.toggle-opt').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+        });
+    });
+});
+
+const fulfillmentInputs = document.querySelectorAll('input[name="fulfillmentMethod"]');
+const deliveryFields = document.getElementById('deliveryFields');
+const deliveryRequiredFields = ['deliveryAddress', 'deliveryNumber', 'deliveryNeighborhood']
+    .map(id => document.getElementById(id));
+
+function updateDeliveryFields() {
+    const isDelivery = document.querySelector('input[name="fulfillmentMethod"]:checked')?.value === 'Delivery';
+    deliveryFields.classList.toggle('active', isDelivery);
+    deliveryRequiredFields.forEach(input => input.required = isDelivery);
+}
+
+fulfillmentInputs.forEach(input => input.addEventListener('change', updateDeliveryFields));
+updateDeliveryFields();
+
+function saveDraft() {
+    const data = Object.fromEntries(new FormData(document.getElementById('orderForm')).entries());
+    delete data.files;
+    sessionStorage.setItem(draftKey, JSON.stringify(data));
+}
+
+function restoreDraft() {
+    const raw = sessionStorage.getItem(draftKey);
+    if (!raw) return;
+
+    const data = JSON.parse(raw);
+    Object.entries(data).forEach(([name, value]) => {
+        const fields = document.querySelectorAll(`[name="${name}"]`);
+        fields.forEach(field => {
+            if (field.type === 'radio') {
+                field.checked = field.value === value;
+            } else {
+                field.value = value;
+            }
+        });
+    });
+
+    refreshToggleStates();
+    updateDeliveryFields();
+}
+
+function refreshToggleStates() {
+    document.querySelectorAll('.toggle-group').forEach(group => {
+        group.querySelectorAll('.toggle-opt').forEach(opt => {
+            opt.classList.toggle('active', opt.querySelector('input')?.checked === true);
+        });
+    });
+}
+
+document.getElementById('orderForm').addEventListener('input', saveDraft);
+document.getElementById('orderForm').addEventListener('change', saveDraft);
+
+function changeCopies(delta) {
+    const input = document.getElementById('copies');
+    const val = parseInt(input.value) + delta;
+    input.value = Math.max(1, Math.min(100, val));
+    saveDraft();
+}
+
+if (isEditingExistingOrder) {
+    sessionStorage.removeItem(draftKey);
+    refreshToggleStates();
+    updateDeliveryFields();
+} else {
+    restoreDraft();
+}
+</script>
+}
