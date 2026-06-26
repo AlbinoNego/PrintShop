@@ -1,0 +1,104 @@
+@model IEnumerable<PrintShop.Models.PrintOrder>
+@{
+    ViewData["Title"] = "Meus Pedidos";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Meus Pedidos</h1>
+    <p>Acompanhe pedidos deste navegador ou busque pelo codigo do pedido.</p>
+</div>
+
+<form action="/Order/FindOrder" method="post" class="lookup-card">
+    <div class="field">
+        <label for="id">Codigo do pedido</label>
+        <input type="text" name="id" id="id" class="text-input" placeholder="Ex: ABC12345" required />
+    </div>
+    <button type="submit" class="btn-primary">Buscar</button>
+</form>
+
+<div class="queue-table-wrapper">
+    @if (!Model.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>Nenhum pedido encontrado neste navegador.</p>
+            <a href="/Order/New" class="btn-primary">Fazer pedido</a>
+        </div>
+    }
+    else
+    {
+        <table class="queue-table">
+            <thead>
+                <tr>
+                    <th>Pedido</th>
+                    <th>Arquivos</th>
+                    <th>Opções</th>
+                    <th>Pagamento</th>
+                    <th>Recebimento</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                    <th>Acompanhar</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Model)
+                {
+                    <tr class="queue-row @order.Status.ToString().ToLower()">
+                        <td>
+                            <strong>#@order.Id</strong>
+                            <small>@order.CreatedAt.ToString("dd/MM HH:mm")</small>
+                        </td>
+                        <td>
+                            @foreach (var f in order.Files)
+                            {
+                                <div class="file-tag">@f.OriginalName</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="option-tags">
+                                <span class="tag">@(order.Color == PrintShop.Models.PrintColor.Color ? "Colorido" : "P&B")</span>
+                                <span class="tag">@order.Copies× cópias</span>
+                                <span class="tag">@order.PaperType.ToString().Replace("_"," ")</span>
+                                @if (order.Laminate) { <span class="tag highlight">Plastificado</span> }
+                                @if (order.Sides == PrintShop.Models.PrintSides.BothSides) { <span class="tag">F/V</span> }
+                            </div>
+                        </td>
+                        <td>
+                            <div>@(order.PaymentMethod == PrintShop.Models.PaymentMethod.Pix ? "PIX" : "Na loja")</div>
+                            <small>@(order.PaymentConfirmed ? "Confirmado" : "Pendente")</small>
+                        </td>
+                        <td>
+                            <div>@(order.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery ? "Entrega" : "Retirada")</div>
+                            @if (order.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery)
+                            {
+                                <small>@order.DeliveryNeighborhood</small>
+                            }
+                        </td>
+                        <td><strong>R$ @order.TotalPrice.ToString("F2")</strong></td>
+                        <td>
+                            <span class="status-pill @order.Status.ToString().ToLower()">
+                                @GetStatusLabel(order.Status)
+                            </span>
+                        </td>
+                        <td>
+                            <a href="/Order/Success/@order.Id" class="btn-action btn-link-action">Ver</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@functions {
+    string GetStatusLabel(PrintShop.Models.OrderStatus status) => status switch {
+        PrintShop.Models.OrderStatus.PendingPayment => "Aguardando pagamento",
+        PrintShop.Models.OrderStatus.PaymentConfirmed => "Pagamento confirmado",
+        PrintShop.Models.OrderStatus.Printing => "Imprimindo",
+        PrintShop.Models.OrderStatus.Ready => "Pronto",
+        PrintShop.Models.OrderStatus.Delivered => "Entregue",
+        PrintShop.Models.OrderStatus.Cancelled => "Cancelado",
+        _ => status.ToString()
+    };
+}

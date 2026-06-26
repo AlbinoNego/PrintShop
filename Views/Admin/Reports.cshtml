@@ -1,0 +1,185 @@
+@model PrintShop.Models.AdminReportViewModel
+@{
+    ViewData["Title"] = "Relatorios";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Relatorios</h1>
+    <p>Resumo operacional dos pedidos registrados no sistema.</p>
+</div>
+
+<div class="queue-stats">
+    <div class="stat report-primary-stat">
+        <strong>R$ @Model.CompletedRevenue.ToString("F2")</strong>
+        <span>Faturamento concluido</span>
+    </div>
+    <div class="stat">
+        <strong>R$ @Model.TotalRegisteredRevenue.ToString("F2")</strong>
+        <span>Total registrado</span>
+    </div>
+    <div class="stat">
+        <strong>R$ @Model.ActiveRevenue.ToString("F2")</strong>
+        <span>Pedidos ativos</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.TotalOrders</strong>
+        <span>Pedidos registrados</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.PrintedPages</strong>
+        <span>Paginas para impressao</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.TotalPages</strong>
+        <span>Paginas enviadas</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.TotalFiles</strong>
+        <span>Arquivos enviados</span>
+    </div>
+    <div class="stat">
+        <strong>@Model.PendingOrders</strong>
+        <span>Aguardando pagamento</span>
+    </div>
+</div>
+
+<div class="review-layout reports-layout">
+    <div class="review-main">
+    <div class="review-card">
+        <h2>Pedidos por status</h2>
+        @if (!Model.StatusBreakdown.Any())
+        {
+            <p class="muted">Sem dados.</p>
+        }
+        else
+        {
+            <div class="report-list">
+                @foreach (var item in Model.StatusBreakdown)
+                {
+                    <div class="report-row">
+                        <span>@item.Label</span>
+                        <strong>@item.Count</strong>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="review-card">
+        <h2>Tipo de impressao</h2>
+        @if (!Model.ColorBreakdown.Any())
+        {
+            <p class="muted">Sem dados.</p>
+        }
+        else
+        {
+            <div class="report-list">
+                @foreach (var item in Model.ColorBreakdown)
+                {
+                    <div class="report-row">
+                        <span>@item.Label</span>
+                        <strong>@item.Count</strong>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+    </div>
+
+    <div class="price-sidebar">
+    <div class="price-card reports-summary">
+        <h2>Tipo de papel</h2>
+        @if (!Model.PaperBreakdown.Any())
+        {
+            <p class="muted">Sem dados.</p>
+        }
+        else
+        {
+            <div class="report-list">
+                @foreach (var item in Model.PaperBreakdown)
+                {
+                    <div class="report-row">
+                        <span>@item.Label</span>
+                        <strong>@item.Count</strong>
+                    </div>
+                }
+            </div>
+        }
+
+        <h2 class="report-subtitle">Forma de pagamento</h2>
+        @if (!Model.PaymentBreakdown.Any())
+        {
+            <p class="muted">Sem dados.</p>
+        }
+        else
+        {
+            <div class="report-list">
+                @foreach (var item in Model.PaymentBreakdown)
+                {
+                    <div class="report-row">
+                        <span>@item.Label</span>
+                        <strong>@item.Count</strong>
+                    </div>
+                }
+            </div>
+        }
+
+        <h2 class="report-subtitle">Resumo</h2>
+        <div class="report-list">
+            <div class="report-row">
+                <span>Prontos</span>
+                <strong>@Model.ReadyOrders</strong>
+            </div>
+            <div class="report-row">
+                <span>Cancelados</span>
+                <strong>@Model.CancelledOrders</strong>
+            </div>
+            <div class="report-row">
+                <span>Pagos</span>
+                <strong>@Model.PaidOrders</strong>
+            </div>
+        </div>
+    </div>
+    </div>
+</div>
+
+<div class="queue-table-wrapper reports-table">
+    @if (!Model.TopCustomers.Any())
+    {
+        <div class="empty-state">
+            <h2>Clientes que mais imprimem</h2>
+            <p>Nenhum cliente registrado ainda.</p>
+        </div>
+    }
+    else
+    {
+        <div class="reports-table-title">
+            <h2>Clientes que mais imprimem</h2>
+            <span>@Model.TopCustomers.Count cliente(s)</span>
+        </div>
+        <table class="queue-table">
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Telefone</th>
+                    <th>Pedidos</th>
+                    <th>Paginas</th>
+                    <th>Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var customer in Model.TopCustomers)
+                {
+                    <tr>
+                        <td><strong>@customer.Name</strong></td>
+                        <td>@customer.Phone</td>
+                        <td>@customer.Orders</td>
+                        <td>@customer.Pages</td>
+                        <td><strong>R$ @customer.Amount.ToString("F2")</strong></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

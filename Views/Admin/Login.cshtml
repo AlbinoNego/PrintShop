@@ -1,0 +1,28 @@
+@{
+    ViewData["Title"] = "Login Administrativo";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var returnUrl = ViewBag.ReturnUrl as string ?? "/Order/Queue";
+}
+
+<div class="admin-login">
+    <div class="page-header">
+        <h1>Area administrativa</h1>
+        <p>Acesse para acompanhar, autorizar e barrar pedidos da papelaria.</p>
+    </div>
+
+    <form action="/Admin/Login" method="post" class="login-card">
+        <input type="hidden" name="returnUrl" value="@returnUrl" />
+
+        <div class="field">
+            <label for="username">Usuario</label>
+            <input type="text" name="username" id="username" class="text-input" autocomplete="username" required />
+        </div>
+
+        <div class="field">
+            <label for="password">Senha</label>
+            <input type="password" name="password" id="password" class="text-input" autocomplete="current-password" required />
+        </div>
+
+        <button type="submit" class="btn-primary btn-lg btn-full">Entrar</button>
+    </form>
+</div>

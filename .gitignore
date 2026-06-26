@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio / local IDE files
+.vs/
+*.user
+*.suo
+
+# Local .NET/NuGet caches created inside this workspace
+.dotnet-home/
+.nuget-home/
+.tmp/
+
+# Application data generated at runtime
+App_Data/*.db
+App_Data/*.db-shm
+App_Data/*.db-wal
+App_Data/uploads/
+App_Data/keys/
+
+# Logs
+*.log
+logs/
+
+# OS files
+Thumbs.db
+Desktop.ini

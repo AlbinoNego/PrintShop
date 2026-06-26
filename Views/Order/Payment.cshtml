@@ -1,0 +1,63 @@
+@model PrintShop.Models.PrintOrder
+@{
+    ViewData["Title"] = "Pagamento";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Pagamento <span class="order-badge">#@Model.Id</span></h1>
+    <p>Escolha como deseja pagar.</p>
+</div>
+
+<div class="payment-layout">
+
+    <div class="payment-options">
+
+        <form action="/Order/ConfirmPayment" method="post">
+            <input type="hidden" name="id" value="@Model.Id" />
+
+            <label class="payment-card @(true ? "selected" : "")" id="pixCard">
+                <input type="radio" name="paymentMethod" value="Pix" checked onchange="selectPayment(this)" />
+                <div class="payment-card-inner">
+                    <div class="payment-icon">⚡</div>
+                    <div>
+                        <strong>PIX</strong>
+                        <p>Gere o QR Code e pague agora. A impressão começa somente após a confirmação do pagamento.</p>
+                    </div>
+                    <div class="payment-check">✓</div>
+                </div>
+            </label>
+
+            <label class="payment-card" id="storeCard">
+                <input type="radio" name="paymentMethod" value="InStore" onchange="selectPayment(this)" />
+                <div class="payment-card-inner">
+                    <div class="payment-icon">🏪</div>
+                    <div>
+                        <strong>Pagar na loja</strong>
+                        <p>O pedido fica reservado para conferência e pagamento presencial na papelaria.</p>
+                    </div>
+                    <div class="payment-check">✓</div>
+                </div>
+            </label>
+
+            <div class="total-reminder">
+                <span>Total a pagar:</span>
+                <strong>R$ @Model.TotalPrice.ToString("F2")</strong>
+            </div>
+
+            <button type="submit" class="btn-primary btn-lg btn-full">
+                Confirmar e prosseguir →
+            </button>
+        </form>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+function selectPayment(radio) {
+    document.querySelectorAll('.payment-card').forEach(c => c.classList.remove('selected'));
+    radio.closest('.payment-card').classList.add('selected');
+}
+</script>
+}

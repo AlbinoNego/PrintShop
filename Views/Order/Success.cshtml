@@ -1,0 +1,117 @@
+@model PrintShop.Models.PrintOrder
+@{
+    ViewData["Title"] = "Pedido Confirmado";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var isDelivery = Model.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery;
+    var readyText = isDelivery ? "Seu pedido está pronto para entrega!" : "Seu pedido está pronto para retirada!";
+}
+
+<div class="success-page">
+    <div class="success-icon">✓</div>
+    <h1>Pedido recebido!</h1>
+    <p class="success-subtitle">Seu pedido <strong>#@Model.Id</strong> foi recebido e aguarda confirmação da papelaria.</p>
+
+    <div class="status-tracker">
+        <div class="status-step @(Model.Status >= PrintShop.Models.OrderStatus.PaymentConfirmed ? "done" : "") active">
+            <div class="step-circle">💳</div>
+            <span>Pagamento</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="status-step @(Model.Status == PrintShop.Models.OrderStatus.Printing || Model.Status == PrintShop.Models.OrderStatus.Ready ? "done" : "")" id="printStep">
+            <div class="step-circle">🖨️</div>
+            <span>Imprimindo</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="status-step @(Model.Status == PrintShop.Models.OrderStatus.Ready ? "done" : "")" id="readyStep">
+            <div class="step-circle">✅</div>
+            <span>Pronto</span>
+        </div>
+    </div>
+
+    <div class="status-message" id="statusMsg">
+        <div class="spinner"></div>
+        <span id="statusText">@GetStatusLabel(Model.Status)</span>
+    </div>
+
+    <div class="success-info">
+        <div class="info-row">
+            <span>Codigo do pedido</span>
+            <strong>#@Model.Id</strong>
+        </div>
+        <div class="info-row">
+            <span>Método de pagamento</span>
+            <strong>@(Model.PaymentMethod == PrintShop.Models.PaymentMethod.Pix ? "PIX" : "Pagamento na loja")</strong>
+        </div>
+        <div class="info-row">
+            <span>Valor do pedido</span>
+            <strong>R$ @Model.TotalPrice.ToString("F2")</strong>
+        </div>
+        <div class="info-row">
+            <span>Cliente</span>
+            <strong>@Model.CustomerName</strong>
+        </div>
+        <div class="info-row">
+            <span>Recebimento</span>
+            <strong>@(Model.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery ? "Entrega" : "Retirada na loja")</strong>
+        </div>
+        @if (Model.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery)
+        {
+            <div class="info-row">
+                <span>Endereco</span>
+                <strong>@Model.DeliveryAddress, @Model.DeliveryNumber - @Model.DeliveryNeighborhood</strong>
+            </div>
+        }
+    </div>
+
+    <div class="success-actions">
+        @if (Model.PaymentMethod == PrintShop.Models.PaymentMethod.Pix &&
+             !Model.PaymentConfirmed &&
+             Model.Status == PrintShop.Models.OrderStatus.PendingPayment)
+        {
+            <a href="/Order/PixPayment/@Model.Id" class="btn-primary">Ver QR Code Pix</a>
+        }
+        <a href="/Order/MyOrders" class="btn-primary">Ver meus pedidos</a>
+        <a href="/Order/New" class="btn-ghost">Fazer outro pedido</a>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const orderId = '@Model.Id';
+const interval = setInterval(async () => {
+    const res = await fetch(`/Order/Status/${orderId}`);
+    const data = await res.json();
+    document.getElementById('statusText').textContent = data.statusLabel;
+
+    if (data.status === 'Printing') {
+        document.getElementById('printStep').classList.add('done', 'active');
+    }
+    if (data.status === 'Ready') {
+        document.getElementById('printStep').classList.add('done');
+        document.getElementById('readyStep').classList.add('done', 'active');
+        document.getElementById('statusMsg').innerHTML =
+            `<div class="ready-badge">@readyText</div>`;
+        clearInterval(interval);
+    }
+    if (data.status === 'Cancelled') {
+        document.getElementById('statusMsg').innerHTML =
+            `<div class="ready-badge">Pedido cancelado.</div>`;
+        clearInterval(interval);
+    }
+}, 4000);
+</script>
+}
+
+@functions {
+    string GetStatusLabel(PrintShop.Models.OrderStatus status) => status switch {
+        PrintShop.Models.OrderStatus.PendingPayment => "Aguardando pagamento",
+        PrintShop.Models.OrderStatus.PaymentConfirmed => "Pagamento confirmado",
+        PrintShop.Models.OrderStatus.Printing => "Imprimindo seus arquivos...",
+        PrintShop.Models.OrderStatus.Ready => Model.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery
+            ? "Pronto para entrega!"
+            : "Pronto para retirada!",
+        PrintShop.Models.OrderStatus.Delivered => "Entregue",
+        PrintShop.Models.OrderStatus.Cancelled => "Cancelado",
+        _ => status.ToString()
+    };
+}

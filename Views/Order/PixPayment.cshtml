@@ -1,0 +1,89 @@
+@model PrintShop.Models.PrintOrder
+@{
+    ViewData["Title"] = "Pagar com PIX";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Pagar com PIX</h1>
+    <p>Escaneie o QR Code ou copie o código abaixo. Guarde o codigo do pedido para acompanhar depois.</p>
+</div>
+
+<div class="pix-layout">
+
+    <div class="pix-card">
+        <div class="pix-order-code">
+            <span>Codigo do pedido</span>
+            <strong>#@Model.Id</strong>
+        </div>
+
+        <div class="pix-amount">
+            <span>Valor a pagar</span>
+            <strong>R$ @Model.TotalPrice.ToString("F2")</strong>
+        </div>
+
+        <!-- QR Code gerado via API Google Charts -->
+        <div class="qr-container">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=@Uri.EscapeDataString(Model.PixCode ?? "")"
+                 alt="QR Code PIX" class="qr-image" />
+        </div>
+
+        <div class="pix-copy">
+            <label>Código PIX (copia e cola)</label>
+            <div class="pix-code-wrapper">
+                <textarea readonly id="pixCode" class="pix-code">@Model.PixCode</textarea>
+                <button type="button" class="btn-copy" onclick="copyPix()">Copiar</button>
+            </div>
+        </div>
+
+        <div class="pix-steps">
+            <div class="pix-step">1. Abra o aplicativo do seu banco</div>
+            <div class="pix-step">2. Escolha pagar via PIX</div>
+            <div class="pix-step">3. Escaneie o QR Code ou cole o código</div>
+            <div class="pix-step">4. Confirme o pagamento de <strong>R$ @Model.TotalPrice.ToString("F2")</strong></div>
+        </div>
+
+        <div class="pix-status" id="pixStatus">
+            <div class="status-dot pending"></div>
+            <span>Aguardando confirmacao do pagamento...</span>
+        </div>
+
+        <a href="/Order/Success/@Model.Id" class="btn-ghost btn-full pix-follow-link">Acompanhar pedido</a>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+function copyPix() {
+    const code = document.getElementById('pixCode');
+    code.select();
+    document.execCommand('copy');
+    const btn = document.querySelector('.btn-copy');
+    btn.textContent = 'Copiado!';
+    setTimeout(() => btn.textContent = 'Copiar', 2000);
+}
+
+// Polling para verificar pagamento
+const orderId = '@Model.Id';
+const interval = setInterval(async () => {
+    const res = await fetch(`/Order/Status/${orderId}`);
+    const data = await res.json();
+    if (data.status === 'Printing' || data.status === 'Ready') {
+        clearInterval(interval);
+        document.getElementById('pixStatus').innerHTML = `
+            <div class="status-dot confirmed"></div>
+            <span>Pagamento confirmado! Redirecionando...</span>
+        `;
+        setTimeout(() => window.location.href = `/Order/Success/${orderId}`, 1500);
+    }
+    if (data.status === 'Cancelled') {
+        clearInterval(interval);
+        document.getElementById('pixStatus').innerHTML = `
+            <div class="status-dot pending"></div>
+            <span>Pedido cancelado. Procure a papelaria para mais detalhes.</span>
+        `;
+    }
+}, 5000);
+</script>
+}

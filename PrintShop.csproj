@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>PrintShop</RootNamespace>
+		<WebRoot>wwwroot</WebRoot>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.0" />
+		<Reference Include="Microsoft.Data.Sqlite">
+			<HintPath>C:\Users\cryst\.nuget\packages\microsoft.data.sqlite.core\8.0.0\lib\net8.0\Microsoft.Data.Sqlite.dll</HintPath>
+		</Reference>
+		<Reference Include="SQLitePCLRaw.core">
+			<HintPath>C:\Users\cryst\.nuget\packages\sqlitepclraw.core\2.1.6\lib\netstandard2.0\SQLitePCLRaw.core.dll</HintPath>
+		</Reference>
+		<Reference Include="SQLitePCLRaw.batteries_v2">
+			<HintPath>C:\Users\cryst\.nuget\packages\sqlitepclraw.bundle_e_sqlite3\2.1.6\lib\netstandard2.0\SQLitePCLRaw.batteries_v2.dll</HintPath>
+		</Reference>
+		<Reference Include="SQLitePCLRaw.provider.e_sqlite3">
+			<HintPath>C:\Users\cryst\.nuget\packages\sqlitepclraw.provider.e_sqlite3\2.1.6\lib\net6.0\SQLitePCLRaw.provider.e_sqlite3.dll</HintPath>
+		</Reference>
+		<Content Include="C:\Users\cryst\.nuget\packages\sqlitepclraw.lib.e_sqlite3\2.1.6\runtimes\win-x64\native\e_sqlite3.dll">
+			<Link>e_sqlite3.dll</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+	<!-- Copia o wwwroot para o bin automaticamente -->
+	<Target Name="CopyWwwroot" AfterTargets="Build">
+		<ItemGroup>
+			<WwwrootFiles Include="$(ProjectDir)wwwroot\**\*.*" />
+		</ItemGroup>
+		<Copy
+		  SourceFiles="@(WwwrootFiles)"
+		  DestinationFiles="@(WwwrootFiles->'$(OutputPath)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+		  SkipUnchangedFiles="true" />
+	</Target>
+
+</Project>
