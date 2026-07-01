@@ -58,8 +58,9 @@
                         <td>
                             <div class="option-tags">
                                 <span class="tag">@(order.Color == PrintShop.Models.PrintColor.Color ? "Colorido" : "P&B")</span>
-                                <span class="tag">@order.Copies× cópias</span>
+                                <span class="tag">@order.Files.Sum(file => file.PageCount * Math.Max(1, file.Copies)) pág. impr.</span>
                                 <span class="tag">@order.PaperType.ToString().Replace("_"," ")</span>
+                                <span class="tag">@(order.Orientation == PrintShop.Models.PrintOrientation.Landscape ? "Paisagem" : "Retrato")</span>
                                 @if (order.Laminate) { <span class="tag highlight">Plastificado</span> }
                                 @if (order.Sides == PrintShop.Models.PrintSides.BothSides) { <span class="tag">F/V</span> }
                             </div>
@@ -93,6 +94,7 @@
 
 @functions {
     string GetStatusLabel(PrintShop.Models.OrderStatus status) => status switch {
+        PrintShop.Models.OrderStatus.Draft => "Em revisão",
         PrintShop.Models.OrderStatus.PendingPayment => "Aguardando pagamento",
         PrintShop.Models.OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         PrintShop.Models.OrderStatus.Printing => "Imprimindo",

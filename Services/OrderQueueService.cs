@@ -30,11 +30,13 @@ public class OrderQueueService
             INSERT INTO Orders
                 (Id, CreatedAt, Status, Color, Copies, PaperType, Laminate, Sides,
                  PaymentMethod, TotalPrice, PixCode, PaymentConfirmed, CustomerName, CustomerPhone,
-                 FulfillmentMethod, DeliveryAddress, DeliveryNumber, DeliveryNeighborhood, DeliveryComplement, DeliveryFee)
+                 FulfillmentMethod, DeliveryAddress, DeliveryNumber, DeliveryNeighborhood, DeliveryComplement, DeliveryFee,
+                 Orientation)
             VALUES
                 ($id, $createdAt, $status, $color, $copies, $paperType, $laminate, $sides,
                  $paymentMethod, $totalPrice, $pixCode, $paymentConfirmed, $customerName, $customerPhone,
-                 $fulfillmentMethod, $deliveryAddress, $deliveryNumber, $deliveryNeighborhood, $deliveryComplement, $deliveryFee);
+                 $fulfillmentMethod, $deliveryAddress, $deliveryNumber, $deliveryNeighborhood, $deliveryComplement, $deliveryFee,
+                 $orientation);
             """;
         AddOrderParameters(command, order);
         await command.ExecuteNonQueryAsync();
@@ -45,9 +47,9 @@ public class OrderQueueService
             fileCommand.Transaction = (SqliteTransaction)transaction;
             fileCommand.CommandText = """
                 INSERT INTO UploadedFiles
-                    (PrintOrderId, OriginalName, StoredName, ContentType, SizeBytes, PageCount)
+                    (PrintOrderId, OriginalName, StoredName, ContentType, SizeBytes, PageCount, Copies)
                 VALUES
-                    ($printOrderId, $originalName, $storedName, $contentType, $sizeBytes, $pageCount);
+                    ($printOrderId, $originalName, $storedName, $contentType, $sizeBytes, $pageCount, $copies);
                 """;
             AddFileParameters(fileCommand, order.Id, file);
             await fileCommand.ExecuteNonQueryAsync();
@@ -93,7 +95,8 @@ public class OrderQueueService
                 DeliveryNumber = $deliveryNumber,
                 DeliveryNeighborhood = $deliveryNeighborhood,
                 DeliveryComplement = $deliveryComplement,
-                DeliveryFee = $deliveryFee
+                DeliveryFee = $deliveryFee,
+                Orientation = $orientation
             WHERE Id = $id;
             """;
         AddOrderParameters(command, order);
@@ -124,15 +127,30 @@ public class OrderQueueService
         }
         await deleteCommand.ExecuteNonQueryAsync();
 
+        foreach (var file in order.Files.Where(file => file.Id > 0))
+        {
+            var updateFileCommand = connection.CreateCommand();
+            updateFileCommand.Transaction = (SqliteTransaction)transaction;
+            updateFileCommand.CommandText = """
+                UPDATE UploadedFiles SET
+                    Copies = $copies
+                WHERE Id = $fileId AND PrintOrderId = $printOrderId;
+                """;
+            updateFileCommand.Parameters.AddWithValue("$copies", Math.Max(1, Math.Min(file.Copies, 100)));
+            updateFileCommand.Parameters.AddWithValue("$fileId", file.Id);
+            updateFileCommand.Parameters.AddWithValue("$printOrderId", order.Id);
+            await updateFileCommand.ExecuteNonQueryAsync();
+        }
+
         foreach (var file in order.Files.Where(file => file.Id == 0))
         {
             var fileCommand = connection.CreateCommand();
             fileCommand.Transaction = (SqliteTransaction)transaction;
             fileCommand.CommandText = """
                 INSERT INTO UploadedFiles
-                    (PrintOrderId, OriginalName, StoredName, ContentType, SizeBytes, PageCount)
+                    (PrintOrderId, OriginalName, StoredName, ContentType, SizeBytes, PageCount, Copies)
                 VALUES
-                    ($printOrderId, $originalName, $storedName, $contentType, $sizeBytes, $pageCount);
+                    ($printOrderId, $originalName, $storedName, $contentType, $sizeBytes, $pageCount, $copies);
                 """;
             AddFileParameters(fileCommand, order.Id, file);
             await fileCommand.ExecuteNonQueryAsync();
@@ -180,7 +198,8 @@ public class OrderQueueService
                 DeliveryNumber TEXT NOT NULL DEFAULT '',
                 DeliveryNeighborhood TEXT NOT NULL DEFAULT '',
                 DeliveryComplement TEXT NOT NULL DEFAULT '',
-                DeliveryFee REAL NOT NULL DEFAULT 0
+                DeliveryFee REAL NOT NULL DEFAULT 0,
+                Orientation INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS UploadedFiles (
@@ -191,6 +210,7 @@ public class OrderQueueService
                 ContentType TEXT NOT NULL,
                 SizeBytes INTEGER NOT NULL,
                 PageCount INTEGER NOT NULL,
+                Copies INTEGER NOT NULL DEFAULT 1,
                 FOREIGN KEY (PrintOrderId) REFERENCES Orders(Id) ON DELETE CASCADE
             );
 
@@ -204,6 +224,8 @@ public class OrderQueueService
         EnsureColumn(connection, "Orders", "DeliveryNeighborhood", "TEXT NOT NULL DEFAULT ''");
         EnsureColumn(connection, "Orders", "DeliveryComplement", "TEXT NOT NULL DEFAULT ''");
         EnsureColumn(connection, "Orders", "DeliveryFee", "REAL NOT NULL DEFAULT 0");
+        EnsureColumn(connection, "Orders", "Orientation", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(connection, "UploadedFiles", "Copies", "INTEGER NOT NULL DEFAULT 1");
     }
 
     private async Task<List<PrintOrder>> QueryOrdersAsync(
@@ -219,7 +241,8 @@ public class OrderQueueService
                 o.Id, o.CreatedAt, o.Status, o.Color, o.Copies, o.PaperType, o.Laminate, o.Sides,
                 o.PaymentMethod, o.TotalPrice, o.PixCode, o.PaymentConfirmed, o.CustomerName, o.CustomerPhone,
                 o.FulfillmentMethod, o.DeliveryAddress, o.DeliveryNumber, o.DeliveryNeighborhood, o.DeliveryComplement, o.DeliveryFee,
-                f.Id, f.PrintOrderId, f.OriginalName, f.StoredName, f.ContentType, f.SizeBytes, f.PageCount
+                o.Orientation,
+                f.Id, f.PrintOrderId, f.OriginalName, f.StoredName, f.ContentType, f.SizeBytes, f.PageCount, f.Copies
             FROM Orders o
             LEFT JOIN UploadedFiles f ON f.PrintOrderId = o.Id
             {whereClause}
@@ -255,22 +278,24 @@ public class OrderQueueService
                     DeliveryNumber = reader.GetString(16),
                     DeliveryNeighborhood = reader.GetString(17),
                     DeliveryComplement = reader.GetString(18),
-                    DeliveryFee = Convert.ToDecimal(reader.GetDouble(19))
+                    DeliveryFee = Convert.ToDecimal(reader.GetDouble(19)),
+                    Orientation = (PrintOrientation)reader.GetInt32(20)
                 };
                 byId[orderId] = order;
             }
 
-            if (!reader.IsDBNull(20))
+            if (!reader.IsDBNull(21))
             {
                 order.Files.Add(new UploadedFile
                 {
-                    Id = reader.GetInt32(20),
-                    PrintOrderId = reader.GetString(21),
-                    OriginalName = reader.GetString(22),
-                    StoredName = reader.GetString(23),
-                    ContentType = reader.GetString(24),
-                    SizeBytes = reader.GetInt64(25),
-                    PageCount = reader.GetInt32(26)
+                    Id = reader.GetInt32(21),
+                    PrintOrderId = reader.GetString(22),
+                    OriginalName = reader.GetString(23),
+                    StoredName = reader.GetString(24),
+                    ContentType = reader.GetString(25),
+                    SizeBytes = reader.GetInt64(26),
+                    PageCount = reader.GetInt32(27),
+                    Copies = reader.GetInt32(28)
                 });
             }
         }
@@ -300,6 +325,7 @@ public class OrderQueueService
         command.Parameters.AddWithValue("$deliveryNeighborhood", order.DeliveryNeighborhood ?? "");
         command.Parameters.AddWithValue("$deliveryComplement", order.DeliveryComplement ?? "");
         command.Parameters.AddWithValue("$deliveryFee", Convert.ToDouble(order.DeliveryFee));
+        command.Parameters.AddWithValue("$orientation", (int)order.Orientation);
     }
 
     private static void AddFileParameters(SqliteCommand command, string orderId, UploadedFile file)
@@ -310,6 +336,7 @@ public class OrderQueueService
         command.Parameters.AddWithValue("$contentType", file.ContentType);
         command.Parameters.AddWithValue("$sizeBytes", file.SizeBytes);
         command.Parameters.AddWithValue("$pageCount", file.PageCount);
+        command.Parameters.AddWithValue("$copies", Math.Max(1, Math.Min(file.Copies, 100)));
     }
 
     private static void EnsureColumn(SqliteConnection connection, string tableName, string columnName, string definition)

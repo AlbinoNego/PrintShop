@@ -15,14 +15,14 @@ public class PricingService
 
     public decimal Calculate(PrintOrder order)
     {
-        int totalPages = order.Files.Sum(f => f.PageCount);
+        int totalPrintedPages = GetTotalPrintedPages(order);
         var settings = _settings.Get();
 
         decimal pricePerPage = GetColorPrice(order.Color, settings) + GetPaperExtra(order.PaperType, settings);
-        decimal printTotal = pricePerPage * totalPages * order.Copies;
+        decimal printTotal = pricePerPage * totalPrintedPages;
 
         decimal laminateTotal = order.Laminate
-            ? settings.LaminatePrice * totalPages * order.Copies
+            ? settings.LaminatePrice * totalPrintedPages
             : 0m;
 
         decimal deliveryTotal = order.FulfillmentMethod == FulfillmentMethod.Delivery
@@ -35,16 +35,18 @@ public class PricingService
     public PriceBreakdown GetBreakdown(PrintOrder order)
     {
         int totalPages = order.Files.Sum(f => f.PageCount);
+        int totalPrintedPages = GetTotalPrintedPages(order);
         var settings = _settings.Get();
         decimal pricePerPage = GetColorPrice(order.Color, settings) + GetPaperExtra(order.PaperType, settings);
 
         return new PriceBreakdown
         {
             TotalPages = totalPages,
+            TotalPrintedPages = totalPrintedPages,
             PricePerPage = pricePerPage,
             SideMultiplier = 1.0m,
-            PrintSubtotal = Math.Round(pricePerPage * totalPages * order.Copies, 2),
-            LaminateSubtotal = order.Laminate ? Math.Round(settings.LaminatePrice * totalPages * order.Copies, 2) : 0m,
+            PrintSubtotal = Math.Round(pricePerPage * totalPrintedPages, 2),
+            LaminateSubtotal = order.Laminate ? Math.Round(settings.LaminatePrice * totalPrintedPages, 2) : 0m,
             DeliverySubtotal = order.FulfillmentMethod == FulfillmentMethod.Delivery ? order.DeliveryFee : 0m,
             Total = Calculate(order)
         };
@@ -64,11 +66,15 @@ public class PricingService
         PaperType.Glossy => settings.GlossyExtra,
         _ => 0m
     };
+
+    private static int GetTotalPrintedPages(PrintOrder order) =>
+        order.Files.Sum(file => file.PageCount * Math.Max(1, file.Copies));
 }
 
 public class PriceBreakdown
 {
     public int TotalPages { get; set; }
+    public int TotalPrintedPages { get; set; }
     public decimal PricePerPage { get; set; }
     public decimal SideMultiplier { get; set; }
     public decimal PrintSubtotal { get; set; }

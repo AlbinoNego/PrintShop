@@ -21,7 +21,7 @@
             {
                 <div class="review-file">
                     <span>@file.OriginalName</span>
-                    <span class="muted">@file.PageCount pág.</span>
+                    <span class="muted">@file.PageCount pág. · @Math.Max(1, file.Copies) cópia(s)</span>
                 </div>
             }
         </div>
@@ -43,8 +43,12 @@
                     <strong>@Model.PaperType.ToString().Replace("_", " ")</strong>
                 </div>
                 <div class="review-row">
+                    <span>Orientação</span>
+                    <strong>@(Model.Orientation == PrintShop.Models.PrintOrientation.Landscape ? "Paisagem" : "Retrato")</strong>
+                </div>
+                <div class="review-row">
                     <span>Cópias</span>
-                    <strong>@Model.Copies</strong>
+                    <strong>Por arquivo</strong>
                 </div>
                 <div class="review-row">
                     <span>Plastificação</span>
@@ -92,12 +96,12 @@
                     <span>@breakdown.TotalPages pág.</span>
                 </div>
                 <div class="price-row">
-                    <span>Preço por página</span>
-                    <span>R$ @breakdown.PricePerPage.ToString("F2")</span>
+                    <span>Páginas impressas</span>
+                    <span>@breakdown.TotalPrintedPages pág.</span>
                 </div>
                 <div class="price-row">
-                    <span>Cópias</span>
-                    <span>× @Model.Copies</span>
+                    <span>Preço por página</span>
+                    <span>R$ @breakdown.PricePerPage.ToString("F2")</span>
                 </div>
                 <div class="price-row">
                     <span>Subtotal impressão</span>
@@ -126,7 +130,7 @@
             <a href="/Order/Payment/@Model.Id" class="btn-primary btn-full">
                 Ir para pagamento →
             </a>
-            @if (Model.Status == PrintShop.Models.OrderStatus.PendingPayment && !Model.PaymentConfirmed)
+            @if ((Model.Status == PrintShop.Models.OrderStatus.Draft || Model.Status == PrintShop.Models.OrderStatus.PendingPayment) && !Model.PaymentConfirmed)
             {
                 <a href="/Order/New?editId=@Model.Id" class="btn-ghost btn-full">← Voltar e editar</a>
             }

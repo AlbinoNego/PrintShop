@@ -18,6 +18,22 @@ App_Data/*.db-shm
 App_Data/*.db-wal
 App_Data/uploads/
 App_Data/keys/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pdf
+*.tmp
+
+# Local secrets / machine-specific configuration
+appsettings.Local.json
+appsettings.*.Local.json
+.env
+.env.*
+
+# Published output
+publish/
 
 # Logs
 *.log
