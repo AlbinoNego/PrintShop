@@ -4,7 +4,7 @@ public class PrintOrder
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8].ToUpper();
     public DateTime CreatedAt { get; set; } = DateTime.Now;
-    public OrderStatus Status { get; set; } = OrderStatus.PendingPayment;
+    public OrderStatus Status { get; set; } = OrderStatus.Draft;
 
     // Arquivos
     public List<UploadedFile> Files { get; set; } = new();
@@ -15,6 +15,7 @@ public class PrintOrder
     public PaperType PaperType { get; set; } = PaperType.A4_75g;
     public bool Laminate { get; set; } = false;
     public PrintSides Sides { get; set; } = PrintSides.OneSide;
+    public PrintOrientation Orientation { get; set; } = PrintOrientation.Portrait;
 
     // Pagamento
     public PaymentMethod PaymentMethod { get; set; }
@@ -44,10 +45,12 @@ public class UploadedFile
     public string ContentType { get; set; } = "";
     public long SizeBytes { get; set; }
     public int PageCount { get; set; } = 1;
+    public int Copies { get; set; } = 1;
 }
 
 public enum OrderStatus
 {
+    Draft = -1,
     PendingPayment,
     PaymentConfirmed,
     Printing,
@@ -74,6 +77,12 @@ public enum PrintSides
 {
     OneSide,
     BothSides
+}
+
+public enum PrintOrientation
+{
+    Portrait,
+    Landscape
 }
 
 public enum PaymentMethod

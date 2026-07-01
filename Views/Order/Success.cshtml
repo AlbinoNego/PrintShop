@@ -104,6 +104,7 @@ const interval = setInterval(async () => {
 
 @functions {
     string GetStatusLabel(PrintShop.Models.OrderStatus status) => status switch {
+        PrintShop.Models.OrderStatus.Draft => "Pedido em revisão",
         PrintShop.Models.OrderStatus.PendingPayment => "Aguardando pagamento",
         PrintShop.Models.OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         PrintShop.Models.OrderStatus.Printing => "Imprimindo seus arquivos...",

@@ -59,12 +59,15 @@ public class OrderController : Controller
     public async Task<IActionResult> Upload(
         List<IFormFile> files,
         string color, int copies, string paperType,
-        bool laminate, string sides,
+        bool laminate, string sides, string orientation,
         string customerName, string customerPhone,
         string fulfillmentMethod, string deliveryAddress,
         string deliveryNumber, string deliveryNeighborhood,
         string deliveryComplement, string? existingOrderId,
-        List<int>? removedFileIds)
+        List<int>? removedFileIds,
+        List<int>? existingFileIds,
+        List<int>? existingFileCopies,
+        List<int>? fileCopies)
     {
         var existingOrder = string.IsNullOrWhiteSpace(existingOrderId)
             ? null
@@ -106,6 +109,9 @@ public class OrderController : Controller
         order.PaperType = Enum.Parse<PaperType>(paperType);
         order.Laminate = laminate;
         order.Sides = Enum.Parse<PrintSides>(sides);
+        order.Orientation = Enum.TryParse<PrintOrientation>(orientation, out var parsedOrientation)
+            ? parsedOrientation
+            : PrintOrientation.Portrait;
         order.FulfillmentMethod = Enum.Parse<FulfillmentMethod>(fulfillmentMethod);
         order.DeliveryAddress = deliveryAddress ?? "";
         order.DeliveryNumber = deliveryNumber ?? "";
@@ -114,7 +120,7 @@ public class OrderController : Controller
         order.DeliveryFee = 0m;
         order.PixCode = null;
         order.PaymentConfirmed = false;
-        order.Status = OrderStatus.PendingPayment;
+        order.Status = OrderStatus.Draft;
 
         if (order.FulfillmentMethod == FulfillmentMethod.Delivery)
         {
@@ -129,6 +135,9 @@ public class OrderController : Controller
             order.DeliveryFee = _pricing.GetDeliveryFee();
         }
 
+        ApplyExistingFileCopies(order, existingFileIds, existingFileCopies);
+
+        var uploadedFileIndex = 0;
         foreach (var file in files ?? new List<IFormFile>())
         {
             var ext = Path.GetExtension(file.FileName).ToLower();
@@ -145,8 +154,10 @@ public class OrderController : Controller
                 StoredName = storedName,
                 ContentType = file.ContentType,
                 SizeBytes = file.Length,
-                PageCount = pageCount
+                PageCount = pageCount,
+                Copies = GetCopyAt(fileCopies, uploadedFileIndex, order.Copies)
             });
+            uploadedFileIndex++;
         }
 
         if (order.Files.Count == 0)
@@ -185,7 +196,7 @@ public class OrderController : Controller
         foreach (var id in orderIds)
         {
             var order = await _queue.GetAsync(id);
-            if (order != null)
+            if (order != null && order.Status != OrderStatus.Draft)
             {
                 orders.Add(order);
             }
@@ -214,6 +225,11 @@ public class OrderController : Controller
         }
 
         AddCustomerOrderId(order.Id);
+        if (order.Status == OrderStatus.Draft)
+        {
+            return RedirectToAction("Review", new { id = order.Id });
+        }
+
         return RedirectToAction("Success", new { id = order.Id });
     }
 
@@ -228,13 +244,35 @@ public class OrderController : Controller
         return View(order);
     }
 
+    // GET /Order/PreviewFile/{id}?fileId=1
+    [HttpGet]
+    public async Task<IActionResult> PreviewFile(string id, int fileId)
+    {
+        var order = await _queue.GetAsync(id);
+        if (order == null) return NotFound();
+
+        if (!IsAdminLoggedIn() && !GetCustomerOrderIds().Contains(order.Id))
+        {
+            return Forbid();
+        }
+
+        var file = order.Files.FirstOrDefault(item => item.Id == fileId);
+        if (file == null) return NotFound();
+
+        var path = _fileStorage.GetPath(file.StoredName);
+        if (!System.IO.File.Exists(path)) return NotFound();
+
+        Response.Headers.ContentDisposition = $"inline; filename=\"{file.OriginalName}\"";
+        return PhysicalFile(path, string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+    }
+
     // GET /Order/Payment/{id}
     public async Task<IActionResult> Payment(string id)
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
 
-        if (order.Status != OrderStatus.PendingPayment || order.PaymentConfirmed)
+        if ((order.Status != OrderStatus.Draft && order.Status != OrderStatus.PendingPayment) || order.PaymentConfirmed)
         {
             return RedirectToAction("Success", new { id });
         }
@@ -259,7 +297,7 @@ public class OrderController : Controller
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
 
-        if (order.Status != OrderStatus.PendingPayment || order.PaymentConfirmed)
+        if ((order.Status != OrderStatus.Draft && order.Status != OrderStatus.PendingPayment) || order.PaymentConfirmed)
         {
             return RedirectToAction("Success", new { id });
         }
@@ -292,6 +330,11 @@ public class OrderController : Controller
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
+        if (order.Status == OrderStatus.Draft || string.IsNullOrWhiteSpace(order.PixCode))
+        {
+            return RedirectToAction("Payment", new { id });
+        }
+
         return View(order);
     }
 
@@ -320,7 +363,9 @@ public class OrderController : Controller
             return RedirectToAction("Login", "Admin", new { returnUrl = "/Order/Queue" });
         }
 
-        var orders = await _queue.GetAllAsync();
+        var orders = (await _queue.GetAllAsync())
+            .Where(order => order.Status != OrderStatus.Draft)
+            .ToList();
         if (!string.IsNullOrWhiteSpace(status) &&
             Enum.TryParse<OrderStatus>(status, ignoreCase: true, out var parsedStatus))
         {
@@ -450,6 +495,7 @@ public class OrderController : Controller
     private static string GetStatusLabel(OrderStatus status) => status switch
     {
         OrderStatus.PendingPayment => "Aguardando pagamento",
+        OrderStatus.Draft => "Em revisao",
         OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         OrderStatus.Printing => "Imprimindo...",
         OrderStatus.Ready => "Pronto para retirada!",
@@ -479,7 +525,7 @@ public class OrderController : Controller
     }
 
     private bool CanCustomerEdit(PrintOrder order) =>
-        order.Status == OrderStatus.PendingPayment &&
+        (order.Status == OrderStatus.Draft || order.Status == OrderStatus.PendingPayment) &&
         !order.PaymentConfirmed &&
         GetCustomerOrderIds().Contains(order.Id);
 
@@ -490,5 +536,33 @@ public class OrderController : Controller
 
     private static string NormalizeOrderId(string? id) =>
         (id ?? "").Trim().TrimStart('#').ToUpperInvariant();
+
+    private static void ApplyExistingFileCopies(
+        PrintOrder order,
+        List<int>? existingFileIds,
+        List<int>? existingFileCopies)
+    {
+        if (existingFileIds is not { Count: > 0 } || existingFileCopies is not { Count: > 0 })
+        {
+            return;
+        }
+
+        for (var index = 0; index < existingFileIds.Count && index < existingFileCopies.Count; index++)
+        {
+            var file = order.Files.FirstOrDefault(item => item.Id == existingFileIds[index]);
+            if (file != null)
+            {
+                file.Copies = NormalizeCopies(existingFileCopies[index]);
+            }
+        }
+    }
+
+    private static int GetCopyAt(List<int>? copies, int index, int fallback) =>
+        copies != null && index >= 0 && index < copies.Count
+            ? NormalizeCopies(copies[index])
+            : NormalizeCopies(fallback);
+
+    private static int NormalizeCopies(int copies) =>
+        Math.Max(1, Math.Min(copies, 100));
 
 }

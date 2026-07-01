@@ -14,6 +14,7 @@
 
 <form action="/Order/Upload" method="post" enctype="multipart/form-data" class="order-form" id="orderForm">
     <input type="hidden" name="existingOrderId" value="@editOrder?.Id" />
+    <input type="hidden" name="copies" id="copies" value="1" />
     <div id="removedFiles"></div>
 
     <!-- PASSO 1: Arquivos -->
@@ -28,6 +29,7 @@
                 <strong>Arraste arquivos aqui</strong>
                 <span>ou clique para selecionar</span>
                 <small>PDF · Word · PowerPoint · JPG · PNG — máx 50MB por arquivo</small>
+                <small class="preview-note">Pré-visualização disponível somente para PDF.</small>
             </div>
             @if (isEditing && editOrder!.Files.Count > 0)
             {
@@ -40,6 +42,12 @@
                                 <strong>@file.OriginalName</strong>
                                 <small>@file.PageCount pág. já enviado</small>
                             </div>
+                            <div class="file-copy-control">
+                                <label>Cópias</label>
+                                <input type="hidden" name="existingFileIds" value="@file.Id" />
+                                <input type="number" name="existingFileCopies" value="@Math.Max(1, file.Copies)" min="1" max="100" class="file-copy-input" onclick="event.stopPropagation();" />
+                            </div>
+                            <a class="file-preview" href="/Order/PreviewFile/@editOrder.Id?fileId=@file.Id" target="_blank" title="Pre-visualizar" onclick="event.stopPropagation();">👁</a>
                             <button type="button" class="file-remove" onclick="event.stopPropagation(); removeExistingFile(@file.Id)">✕</button>
                         </div>
                     }
@@ -118,11 +126,16 @@
             </div>
 
             <div class="option-group">
-                <label for="copies">Número de cópias</label>
-                <div class="counter">
-                    <button type="button" class="counter-btn" onclick="changeCopies(-1)">−</button>
-                    <input type="number" name="copies" id="copies" value="@(editOrder?.Copies ?? 1)" min="1" max="100" class="counter-input" />
-                    <button type="button" class="counter-btn" onclick="changeCopies(1)">+</button>
+                <label>Orientação</label>
+                <div class="toggle-group">
+                    <label class="toggle-opt @(editOrder?.Orientation != PrintOrientation.Landscape ? "active" : "")">
+                        <input type="radio" name="orientation" value="Portrait" @(editOrder?.Orientation != PrintOrientation.Landscape ? "checked" : "") />
+                        <span>Retrato</span>
+                    </label>
+                    <label class="toggle-opt @(editOrder?.Orientation == PrintOrientation.Landscape ? "active" : "")">
+                        <input type="radio" name="orientation" value="Landscape" @(editOrder?.Orientation == PrintOrientation.Landscape ? "checked" : "") />
+                        <span>Paisagem</span>
+                    </label>
                 </div>
             </div>
 
@@ -225,9 +238,10 @@ const draftKey = 'printshop:new-order-draft';
 let remainingExistingFiles = @(isEditing ? editOrder!.Files.Count : 0);
 const isEditingExistingOrder = @(isEditing ? "true" : "false");
 let selectedFiles = new DataTransfer();
+let selectedFileCopies = [];
 
 uploadZone.addEventListener('click', e => {
-    if (e.target.closest('.file-remove')) return;
+    if (e.target.closest('.file-remove, .file-preview, .file-copy-control')) return;
     fileInput.click();
 });
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
@@ -241,15 +255,25 @@ uploadZone.addEventListener('drop', e => {
 fileInput.addEventListener('change', () => addFiles(fileInput.files));
 
 function addFiles(files) {
-    for (const f of files) selectedFiles.items.add(f);
+    for (const f of files) {
+        selectedFiles.items.add(f);
+        selectedFileCopies.push(1);
+    }
     fileInput.files = selectedFiles.files;
     renderFileList();
 }
 
 function removeFile(index) {
     const dt = new DataTransfer();
-    Array.from(selectedFiles.files).forEach((f, i) => { if (i !== index) dt.items.add(f); });
+    const nextCopies = [];
+    Array.from(selectedFiles.files).forEach((f, i) => {
+        if (i !== index) {
+            dt.items.add(f);
+            nextCopies.push(selectedFileCopies[i] || 1);
+        }
+    });
     selectedFiles = dt;
+    selectedFileCopies = nextCopies;
     fileInput.files = selectedFiles.files;
     renderFileList();
 }
@@ -278,9 +302,35 @@ function renderFileList() {
                 <strong>${f.name}</strong>
                 <small>${(f.size / 1024).toFixed(0)} KB</small>
             </div>
+            <div class="file-copy-control">
+                <label>Cópias</label>
+                <input type="number" name="fileCopies" value="${selectedFileCopies[i] || 1}" min="1" max="100" class="file-copy-input" onclick="event.stopPropagation();" onchange="updateFileCopies(${i}, this.value)" />
+            </div>
+            <button type="button" class="file-preview" title="Pre-visualizar" onclick="event.stopPropagation(); previewSelectedFile(${i})">👁</button>
             <button type="button" class="file-remove" onclick="event.stopPropagation(); removeFile(${i})">✕</button>
         </div>
     `).join('');
+}
+
+function updateFileCopies(index, value) {
+    selectedFileCopies[index] = normalizeCopies(value);
+    saveDraft();
+}
+
+function previewSelectedFile(index) {
+    const file = Array.from(selectedFiles.files)[index];
+    if (!file) return;
+
+    const extension = file.name.split('.').pop().toLowerCase();
+    const canPreview = file.type === 'application/pdf' || extension === 'pdf';
+    if (!canPreview) {
+        alert('Pré-visualização disponível somente para PDF. Arquivos Word, PowerPoint e imagens serão enviados normalmente para impressão.');
+        return;
+    }
+
+    const url = URL.createObjectURL(file);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function updateSubmitState() {
@@ -318,7 +368,15 @@ updateDeliveryFields();
 
 function saveDraft() {
     const data = Object.fromEntries(new FormData(document.getElementById('orderForm')).entries());
-    delete data.files;
+    [
+        'files',
+        'existingOrderId',
+        'removedFileIds',
+        'existingFileIds',
+        'existingFileCopies',
+        'fileCopies'
+    ].forEach(field => delete data[field]);
+
     sessionStorage.setItem(draftKey, JSON.stringify(data));
 }
 
@@ -327,7 +385,18 @@ function restoreDraft() {
     if (!raw) return;
 
     const data = JSON.parse(raw);
+    const ignoredFields = new Set([
+        'files',
+        'existingOrderId',
+        'removedFileIds',
+        'existingFileIds',
+        'existingFileCopies',
+        'fileCopies'
+    ]);
+
     Object.entries(data).forEach(([name, value]) => {
+        if (ignoredFields.has(name)) return;
+
         const fields = document.querySelectorAll(`[name="${name}"]`);
         fields.forEach(field => {
             if (field.type === 'radio') {
@@ -352,12 +421,15 @@ function refreshToggleStates() {
 
 document.getElementById('orderForm').addEventListener('input', saveDraft);
 document.getElementById('orderForm').addEventListener('change', saveDraft);
+document.getElementById('orderForm').addEventListener('submit', () => {
+    if (!isEditingExistingOrder) {
+        document.querySelector('input[name="existingOrderId"]').value = '';
+    }
+});
 
-function changeCopies(delta) {
-    const input = document.getElementById('copies');
-    const val = parseInt(input.value) + delta;
-    input.value = Math.max(1, Math.min(100, val));
-    saveDraft();
+function normalizeCopies(value) {
+    const parsed = parseInt(value);
+    return Math.max(1, Math.min(100, Number.isNaN(parsed) ? 1 : parsed));
 }
 
 if (isEditingExistingOrder) {

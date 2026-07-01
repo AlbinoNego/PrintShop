@@ -1,6 +1,7 @@
 using PrintShop.Models;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace PrintShop.Services;
 
@@ -46,7 +47,8 @@ public class PrinterService
                     continue;
                 }
 
-                for (int copy = 0; copy < order.Copies; copy++)
+                var fileCopies = Math.Max(1, file.Copies);
+                for (int copy = 0; copy < fileCopies; copy++)
                 {
                     await PrintFileAsync(filePath, file, order);
                     printedFiles++;
@@ -77,6 +79,7 @@ public class PrinterService
         }
     }
 
+    [SupportedOSPlatform("windows")]
     private async Task PrintOnWindowsAsync(string filePath, UploadedFile file, PrintOrder order)
     {
         var ext = Path.GetExtension(file.OriginalName).ToLower();
@@ -92,7 +95,18 @@ public class PrinterService
 
             if (ext is ".doc" or ".docx")
             {
-                await PrintWithWindowsShellAsync(filePath, file);
+                if (await PrintWordWithOfficeAsync(filePath, file, order, selectedPrinter))
+                {
+                    return;
+                }
+
+                await PrintWithWindowsShellAsync(filePath, file, order);
+                return;
+            }
+
+            if (ext is ".ppt" or ".pptx" &&
+                await PrintPowerPointWithOfficeAsync(filePath, file, order, selectedPrinter))
+            {
                 return;
             }
 
@@ -100,7 +114,7 @@ public class PrinterService
 
             if (string.IsNullOrWhiteSpace(executable))
             {
-                await PrintWithWindowsShellAsync(filePath, file);
+                await PrintWithWindowsShellAsync(filePath, file, order);
                 return;
             }
 
@@ -135,11 +149,12 @@ public class PrinterService
         }
     }
 
-    private async Task PrintWithWindowsShellAsync(string filePath, UploadedFile file)
+    private async Task PrintWithWindowsShellAsync(string filePath, UploadedFile file, PrintOrder order)
     {
         _logger.LogInformation(
-            "Tentando impressao pelo Windows: {File}",
-            file.OriginalName);
+            "Tentando impressao pelo Windows: {File}. Orientacao solicitada: {Orientation}.",
+            file.OriginalName,
+            order.Orientation);
 
         var startInfo = new ProcessStartInfo
         {
@@ -157,6 +172,179 @@ public class PrinterService
         }
 
         await Task.Delay(1000);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private Task<bool> PrintWordWithOfficeAsync(
+        string filePath,
+        UploadedFile file,
+        PrintOrder order,
+        string printerName)
+    {
+        return Task.Run(() =>
+        {
+            dynamic? word = null;
+            dynamic? document = null;
+            string? tempFilePath = null;
+            string? tempPdfPath = null;
+
+            try
+            {
+                var wordType = Type.GetTypeFromProgID("Word.Application");
+                if (wordType == null)
+                {
+                    return false;
+                }
+
+                var wordInstance = Activator.CreateInstance(wordType);
+                if (wordInstance == null)
+                {
+                    return false;
+                }
+
+                word = wordInstance;
+                word.Visible = false;
+                if (!string.IsNullOrWhiteSpace(printerName))
+                {
+                    word.ActivePrinter = printerName;
+                }
+
+                tempFilePath = CreateTemporaryOfficeFile(filePath);
+                File.Copy(filePath, tempFilePath, overwrite: true);
+
+                document = word.Documents.Open(tempFilePath, ReadOnly: false, Visible: false);
+                if (!ShouldChangeWordOrientation(document, order.Orientation))
+                {
+                    _logger.LogInformation(
+                        "Word ja esta em {Orientation}. Imprimindo diretamente pelo fluxo antigo: {File}",
+                        order.Orientation,
+                        file.OriginalName);
+
+                    document.Close(SaveChanges: 0);
+                    word.Quit(SaveChanges: 0);
+                    return false;
+                }
+
+                ApplyWordOrientation(document, order.Orientation);
+                document.Repaginate();
+                document.Save();
+
+                tempPdfPath = CreateTemporaryFile(".pdf");
+                document.ExportAsFixedFormat(tempPdfPath, 17);
+                document.Close(SaveChanges: 0);
+                word.Quit(SaveChanges: 0);
+
+                _logger.LogInformation(
+                    "Imprimindo Word convertido para PDF temporario com orientacao {Orientation}: {File}",
+                    order.Orientation,
+                    file.OriginalName);
+
+                PrintPdfFile(tempPdfPath, printerName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Nao foi possivel aplicar orientacao no Word para {File}. Usando fallback do Windows.",
+                    file.OriginalName);
+                TryCloseOfficeDocument(document);
+                TryQuitOfficeApp(word);
+                return false;
+            }
+            finally
+            {
+                ReleaseComObject(document);
+                ReleaseComObject(word);
+                DeleteTemporaryFile(tempFilePath);
+                DeleteTemporaryFile(tempPdfPath);
+            }
+        });
+    }
+
+    [SupportedOSPlatform("windows")]
+    private Task<bool> PrintPowerPointWithOfficeAsync(
+        string filePath,
+        UploadedFile file,
+        PrintOrder order,
+        string printerName)
+    {
+        return Task.Run(() =>
+        {
+            dynamic? powerPoint = null;
+            dynamic? presentation = null;
+            string? tempFilePath = null;
+            string? tempPdfPath = null;
+
+            try
+            {
+                var powerPointType = Type.GetTypeFromProgID("PowerPoint.Application");
+                if (powerPointType == null)
+                {
+                    return false;
+                }
+
+                var powerPointInstance = Activator.CreateInstance(powerPointType);
+                if (powerPointInstance == null)
+                {
+                    return false;
+                }
+
+                tempFilePath = CreateTemporaryOfficeFile(filePath);
+                File.Copy(filePath, tempFilePath, overwrite: true);
+
+                powerPoint = powerPointInstance;
+                presentation = powerPoint.Presentations.Open(tempFilePath, -1, 0, 0);
+                if (!ShouldChangePowerPointOrientation(presentation, order.Orientation))
+                {
+                    _logger.LogInformation(
+                        "PowerPoint ja esta em {Orientation}. Imprimindo diretamente pelo fluxo antigo: {File}",
+                        order.Orientation,
+                        file.OriginalName);
+
+                    presentation.Close();
+                    powerPoint.Quit();
+                    return false;
+                }
+
+                ApplyPowerPointOrientation(presentation, order.Orientation);
+                presentation.Save();
+                tempPdfPath = CreateTemporaryFile(".pdf");
+                presentation.SaveAs(tempPdfPath, 32);
+
+                if (!string.IsNullOrWhiteSpace(printerName))
+                {
+                    presentation.PrintOptions.ActivePrinter = printerName;
+                }
+
+                _logger.LogInformation(
+                    "Imprimindo PowerPoint convertido para PDF temporario com orientacao {Orientation}: {File}",
+                    order.Orientation,
+                    file.OriginalName);
+
+                presentation.Close();
+                powerPoint.Quit();
+                PrintPdfFile(tempPdfPath, printerName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Nao foi possivel aplicar orientacao no PowerPoint para {File}. Usando fallback configurado.",
+                    file.OriginalName);
+                TryCloseOfficeDocument(presentation);
+                TryQuitOfficeApp(powerPoint);
+                return false;
+            }
+            finally
+            {
+                ReleaseComObject(presentation);
+                ReleaseComObject(powerPoint);
+                DeleteTemporaryFile(tempFilePath);
+                DeleteTemporaryFile(tempPdfPath);
+            }
+        });
     }
 
     private string? ResolvePrintExecutable(string ext)
@@ -219,7 +407,11 @@ public class PrinterService
         return string.IsNullOrWhiteSpace(specific) ? settings.DefaultPrinter : specific;
     }
 
-    private static string BuildPrintArguments(string filePath, string ext, string executable, string printerName)
+    private static string BuildPrintArguments(
+        string filePath,
+        string ext,
+        string executable,
+        string printerName)
     {
         if (ext == ".pdf")
         {
@@ -238,6 +430,41 @@ public class PrinterService
 
         // Word, PowerPoint e imagens via shell print
         return $"/p \"{filePath}\"";
+    }
+
+    private void PrintPdfFile(string filePath, string printerName)
+    {
+        var executable = ResolvePrintExecutable(".pdf");
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            var shellStartInfo = new ProcessStartInfo
+            {
+                FileName = filePath,
+                Verb = "print",
+                UseShellExecute = true,
+                CreateNoWindow = false,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+
+            using var shellProcess = Process.Start(shellStartInfo);
+            shellProcess?.WaitForExit();
+            Thread.Sleep(5000);
+            return;
+        }
+
+        var arguments = BuildPrintArguments(filePath, ".pdf", executable, printerName);
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = arguments,
+            UseShellExecute = true,
+            CreateNoWindow = false,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+
+        using var process = Process.Start(startInfo);
+        process?.WaitForExit();
+        Thread.Sleep(5000);
     }
 
     /// <summary>
@@ -309,5 +536,163 @@ public class PrinterService
 
         using var process = Process.Start(psi);
         process?.WaitForExit();
+    }
+
+    private static void ApplyWordOrientation(dynamic document, PrintOrientation orientation)
+    {
+        var officeOrientation = orientation == PrintOrientation.Landscape ? 1 : 0;
+
+        foreach (dynamic section in document.Sections)
+        {
+            section.PageSetup.Orientation = officeOrientation;
+        }
+
+        document.PageSetup.Orientation = officeOrientation;
+    }
+
+    private static bool ShouldChangeWordOrientation(dynamic document, PrintOrientation requestedOrientation)
+    {
+        var targetOrientation = requestedOrientation == PrintOrientation.Landscape ? 1 : 0;
+
+        foreach (dynamic section in document.Sections)
+        {
+            if ((int)section.PageSetup.Orientation != targetOrientation)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void ApplyPowerPointOrientation(dynamic presentation, PrintOrientation orientation)
+    {
+        var targetOrientation = orientation == PrintOrientation.Landscape ? 2 : 1;
+        presentation.PageSetup.SlideOrientation = targetOrientation;
+
+        if (orientation == PrintOrientation.Landscape &&
+            presentation.PageSetup.SlideHeight > presentation.PageSetup.SlideWidth)
+        {
+            SwapPowerPointSlideSize(presentation);
+        }
+        else if (orientation == PrintOrientation.Portrait &&
+            presentation.PageSetup.SlideWidth > presentation.PageSetup.SlideHeight)
+        {
+            SwapPowerPointSlideSize(presentation);
+        }
+    }
+
+    private static bool ShouldChangePowerPointOrientation(dynamic presentation, PrintOrientation requestedOrientation)
+    {
+        var slideOrientation = (int)presentation.PageSetup.SlideOrientation;
+        var isLandscapeByFlag = slideOrientation == 2;
+        var isLandscapeBySize = presentation.PageSetup.SlideWidth >= presentation.PageSetup.SlideHeight;
+        var requestedLandscape = requestedOrientation == PrintOrientation.Landscape;
+
+        return isLandscapeByFlag != requestedLandscape || isLandscapeBySize != requestedLandscape;
+    }
+
+    private static void SwapPowerPointSlideSize(dynamic presentation)
+    {
+        var width = presentation.PageSetup.SlideWidth;
+        presentation.PageSetup.SlideWidth = presentation.PageSetup.SlideHeight;
+        presentation.PageSetup.SlideHeight = width;
+    }
+
+    private static string CreateTemporaryOfficeFile(string sourcePath)
+    {
+        return CreateTemporaryFile(Path.GetExtension(sourcePath), Path.GetFileNameWithoutExtension(sourcePath));
+    }
+
+    private static string CreateTemporaryFile(string extension, string? baseName = null)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "PrintShop");
+        Directory.CreateDirectory(directory);
+
+        if (!extension.StartsWith('.'))
+        {
+            extension = $".{extension}";
+        }
+
+        var safeBaseName = string.IsNullOrWhiteSpace(baseName) ? "printshop" : baseName;
+        var fileName = $"{safeBaseName}-{Guid.NewGuid():N}{extension}";
+        return Path.Combine(directory, fileName);
+    }
+
+    private static void DeleteTemporaryFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Temporary files are best-effort cleanup.
+        }
+    }
+
+    private static void TryCloseOfficeDocument(dynamic? document)
+    {
+        if (document == null) return;
+
+        try
+        {
+            document.Close(SaveChanges: 0);
+        }
+        catch
+        {
+            try
+            {
+                document.Close();
+            }
+            catch
+            {
+                // Best effort cleanup for Office COM automation.
+            }
+        }
+    }
+
+    private static void TryQuitOfficeApp(dynamic? app)
+    {
+        if (app == null) return;
+
+        try
+        {
+            app.Quit(SaveChanges: 0);
+        }
+        catch
+        {
+            try
+            {
+                app.Quit();
+            }
+            catch
+            {
+                // Best effort cleanup for Office COM automation.
+            }
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void ReleaseComObject(object? value)
+    {
+        if (value == null) return;
+
+        try
+        {
+            if (Marshal.IsComObject(value))
+            {
+                Marshal.FinalReleaseComObject(value);
+            }
+        }
+        catch
+        {
+            // Avoid failing the print flow while releasing unmanaged COM objects.
+        }
     }
 }

@@ -1,100 +1,113 @@
 # PrintShop
 
-O **PrintShop** é um sistema web feito em **ASP.NET Core 8** para facilitar o atendimento de papelarias que recebem muitos pedidos de impressão.
+PrintShop é um sistema web em ASP.NET Core 8 criado para automatizar pedidos de impressão em papelarias.
 
-A ideia do projeto é permitir que o cliente faça o pedido pelo próprio site, envie os arquivos, escolha as opções de impressão, veja o valor final, pague via PIX ou combine o pagamento na loja, e acompanhe o andamento do pedido.
+A ideia é diminuir o atendimento manual por WhatsApp: o cliente acessa o site, envia os arquivos, escolhe as opções de impressão, revisa o valor, escolhe a forma de pagamento e acompanha o andamento do pedido pelo código.
 
 O sistema também possui uma área administrativa para a papelaria acompanhar pedidos, autorizar pagamentos, configurar preços, configurar impressoras e consultar relatórios.
+
+Este projeto ainda está em desenvolvimento e não deve ser usado em produção sem revisão de segurança, backup, credenciais reais e integração definitiva de pagamento.
 
 ---
 
 ## Funcionalidades
 
 - Envio de arquivos PDF, Word, PowerPoint, JPG e PNG.
-- Contagem automática de páginas dos arquivos enviados.
-- Cálculo do valor com base em páginas, cópias, papel, plastificação e entrega.
+- Arquivos armazenados fora da pasta pública do site.
+- Banco SQLite para pedidos e configurações.
+- Contagem real de páginas dos arquivos.
+- Cálculo por página, tipo de papel, plastificação, entrega e cópias por arquivo.
+- Escolha entre preto e branco ou colorido.
+- Escolha entre frente simples ou frente e verso.
+- Escolha entre retrato e paisagem.
+- Edição do pedido antes da confirmação da forma de pagamento.
+- Pré-visualização disponível para PDF.
 - Escolha entre retirada na loja ou entrega.
-- Pagamento via PIX ou pagamento presencial para retirada.
-- Acompanhamento do pedido pelo código.
-- Edição do pedido antes da confirmação do pagamento.
-- Armazenamento dos arquivos fora da pasta pública do site.
-- Banco de dados SQLite para salvar pedidos e configurações.
+- Entrega direcionada para PIX.
+- Retirada com PIX ou pagamento na loja.
+- Pedido só entra no painel administrativo depois que o cliente confirma a forma de pagamento.
+- Busca de pedido pelo código.
 - Painel administrativo com login.
-- Filtro e busca de pedidos no painel administrativo.
+- Filtros, busca e detalhes de pedidos no admin.
+- Autorização manual de pagamento pelo admin.
+- Reimpressão, cancelamento, marcação como pronto e entregue.
 - Relatórios administrativos.
-- Configuração de preços pelo admin.
-- Configuração de impressoras pelo admin.
-- Reimpressão de pedidos.
-- Webhook PIX para confirmação automática de pagamento.
-- HTTPS configurado.
-- Rate limiting para uploads, webhook e requisições gerais.
+- Configuração de preços e impressoras pelo admin.
+- Webhook PIX genérico.
+- HTTPS, HSTS fora de desenvolvimento e cookies seguros.
+- Rate limiting global, para upload e para webhook.
 
 ---
 
-## Tecnologias utilizadas
+## Tecnologias
 
 - ASP.NET Core 8 MVC
 - Razor Views
 - SQLite
 - HTML, CSS e JavaScript
+- IIS/Windows para hospedagem recomendada
 - Data Protection do ASP.NET Core
 - Rate Limiting nativo do ASP.NET Core
 
 ---
 
-## Como executar o projeto
+## Como executar localmente
 
-Primeiro, clone o repositório:
-
-```powershell
-git clone <url-do-repositorio>
-```
-
-Depois, entre na pasta do projeto:
+Clone o repositório:
 
 ```powershell
-cd PrintShop-main
+git clone https://github.com/AlbinoNego/PrintShop.git
 ```
 
-Restaure as dependências:
+Entre na pasta:
+
+```powershell
+cd PrintShop
+```
+
+Restaure e compile:
 
 ```powershell
 dotnet restore
+dotnet build
 ```
 
-Execute o projeto:
+Execute:
 
 ```powershell
 dotnet run
 ```
 
-O projeto foi configurado para rodar com HTTPS no ambiente local.
-
-Caso o navegador mostre aviso de certificado, execute:
+Se o navegador reclamar do certificado HTTPS local:
 
 ```powershell
 dotnet dev-certs https --trust
 ```
 
-No Visual Studio, o ideal é abrir o projeto pelo arquivo `.csproj` ou por uma solução `.sln`. Abrir somente a pasta pode fazer o Visual Studio usar outra configuração de inicialização.
+No Visual Studio, abra o projeto pelo arquivo `.csproj`. Abrir somente a pasta pode fazer o Visual Studio usar outro perfil de inicialização.
 
 ---
 
-## Configurações
+## Configuração
 
-As configurações principais ficam no arquivo `appsettings.json`.
+As configurações ficam em `appsettings.json`.
 
-Exemplo:
+O arquivo versionado usa valores genéricos:
 
 ```json
 {
   "PrintShop": {
-    "PixKey": "sua-chave-pix",
+    "PixKey": "configure-sua-chave-pix",
     "MerchantName": "NOME DA LOJA",
     "MerchantCity": "CIDADE",
     "PixWebhookSecret": "configure-um-segredo-forte",
     "MaxFileSizeMB": 50,
-    "DefaultPrinter": "",
+    "PrintExecutables": {
+      "Pdf": "",
+      "Word": "",
+      "PowerPoint": "",
+      "Image": ""
+    },
     "Admin": {
       "Username": "configure-um-usuario",
       "Password": "configure-uma-senha"
@@ -103,23 +116,13 @@ Exemplo:
 }
 ```
 
-Para um ambiente real, o ideal é não deixar senhas e segredos diretamente no `appsettings.json`. O recomendado é usar variáveis de ambiente ou outro método mais seguro de configuração.
+Para ambiente real, não deixe chave PIX, senha de admin ou segredo de webhook diretamente no repositório. Use variáveis de ambiente, `appsettings.Local.json` fora do Git ou outro provedor seguro.
 
 ---
 
-## Estrutura do projeto
+## Armazenamento
 
-```text
-PrintShop-main/
-├── Controllers/
-├── Models/
-├── Services/
-├── Views/
-├── wwwroot/
-└── App_Data/
-```
-
-A pasta `App_Data` é usada para dados internos da aplicação:
+Os dados gerados em execução ficam em `App_Data`:
 
 ```text
 App_Data/
@@ -128,29 +131,58 @@ App_Data/
 └── keys/
 ```
 
-Os arquivos enviados pelos clientes ficam em `App_Data/uploads`, fora do `wwwroot`, para evitar acesso público direto pelo navegador.
+Esses arquivos não devem ir para o GitHub.
+
+O `.gitignore` ignora banco SQLite, arquivos enviados, PDFs gerados, chaves locais, logs, build e arquivos de ambiente.
 
 ---
 
 ## Fluxo do cliente
 
-1. O cliente acessa o site.
-2. Envia os arquivos que deseja imprimir.
-3. Escolhe as opções de impressão.
-4. Escolhe retirada ou entrega.
-5. Informa os dados de contato.
-6. Revisa o pedido e o valor final.
-7. Escolhe a forma de pagamento.
-8. Recebe o código do pedido.
-9. Acompanha o andamento pelo site.
+1. O cliente cria um novo pedido.
+2. Envia os arquivos.
+3. Escolhe papel, cor, lados, orientação, plastificação, cópias por arquivo e retirada/entrega.
+4. Informa nome e telefone.
+5. Revisa o pedido.
+6. Se voltar para editar, os arquivos já enviados continuam no pedido.
+7. Confirma a forma de pagamento.
+8. O pedido entra no painel administrativo.
+9. O cliente acompanha pelo código.
 
-Depois que o pedido é confirmado, ele não pode mais ser editado pelo cliente.
+Enquanto o cliente está apenas revisando, o pedido fica como rascunho e não aparece no painel administrativo.
+
+---
+
+## Impressão
+
+A impressão automática fica em:
+
+```text
+Services/PrinterService.cs
+```
+
+O comportamento atual é:
+
+- PDF: usa o leitor PDF instalado ou o fallback do Windows.
+- Word: imprime diretamente quando a orientação escolhida já é a mesma do arquivo.
+- Word: quando precisa mudar orientação, gera um PDF temporário com a nova orientação e imprime esse temporário.
+- PowerPoint: segue a mesma lógica do Word.
+- Imagens: usa o aplicativo associado no Windows.
+- Fora do Windows: simulação de impressão.
+
+Os PDFs enviados pelo cliente não são convertidos nem alterados pelo fluxo de orientação.
+
+As impressoras e preços são configurados em:
+
+```text
+/Admin/Settings
+```
 
 ---
 
 ## Área administrativa
 
-As principais rotas administrativas são:
+Rotas principais:
 
 ```text
 /Admin/Login
@@ -159,108 +191,105 @@ As principais rotas administrativas são:
 /Admin/Settings
 ```
 
-No painel administrativo é possível:
+No admin é possível:
 
-- visualizar os pedidos;
+- ver pedidos;
 - filtrar por status;
 - buscar por código, cliente, telefone ou arquivo;
-- ver detalhes do pedido;
+- ver detalhes;
 - autorizar pagamento;
 - barrar pedido;
-- marcar pedido como pronto;
-- marcar pedido como entregue;
-- reimprimir pedido;
-- configurar impressoras;
-- pausar a impressão automática;
+- marcar como pronto;
+- marcar como entregue;
+- reimprimir;
 - configurar preços;
+- configurar impressoras;
+- pausar impressão automática;
 - consultar relatórios.
 
 ---
 
-## Preços
+## PIX
 
-Os preços são configuráveis pela tela administrativa.
-
-Atualmente o sistema permite configurar:
-
-- preço por página em preto e branco;
-- preço por página colorida;
-- adicional por tipo de papel;
-- valor da plastificação;
-- taxa de entrega.
-
-O sistema não aplica desconto automático para frente e verso.
-
----
-
-## Impressão automática
-
-A parte de impressão fica no serviço:
-
-```text
-Services/PrinterService.cs
-```
-
-O comportamento atual é:
-
-- PDF: impressão usando leitor PDF instalado ou fallback do Windows;
-- Word: impressão usando a ação de impressão associada do Windows;
-- PowerPoint: impressão usando PowerPoint quando disponível;
-- imagens: impressão pelo aplicativo associado;
-- fora do Windows: simulação de impressão.
-
-As impressoras podem ser configuradas pela tela `/Admin/Settings`.
-
-Nos testes locais, a impressão funcionou com PDF, PPT/PPTX, DOC/DOCX e imagens.
-
----
-
-## PIX e webhook
-
-O sistema possui um endpoint de webhook para confirmação automática de pagamento PIX:
+O endpoint de webhook é:
 
 ```http
 POST /Pix/Webhook
 ```
 
-Esse webhook exige um segredo configurado na aplicação.
-
-A implementação atual é genérica e deve ser adaptada ao banco ou gateway de pagamento que for usado em produção.
+A implementação atual é genérica. Para produção, precisa adaptar ao banco ou gateway usado, validar assinatura/evento e registrar logs de confirmação.
 
 ---
 
 ## Segurança
 
-Algumas medidas já foram adicionadas:
+Já existe:
 
 - HTTPS;
-- HSTS fora do ambiente de desenvolvimento;
-- cookies de sessão seguros;
-- rate limiting para uploads;
-- rate limiting para webhook PIX;
-- arquivos enviados fora da pasta pública;
-- painel administrativo protegido por login.
+- HSTS fora de desenvolvimento;
+- cookies seguros;
+- rate limiting;
+- upload fora do `wwwroot`;
+- painel admin com login;
+- `.gitignore` para dados locais e arquivos de clientes.
 
-Mesmo assim, antes de usar em produção, ainda é necessário revisar pontos importantes de segurança.
+Ainda precisa melhorar antes de produção:
 
----
-
-## Pontos que ainda precisam ser melhorados
-
-- Integrar um provedor PIX real.
-- Configurar domínio e certificado HTTPS real.
-- Trocar credenciais e segredos por configuração segura.
-- Melhorar o login administrativo.
-- Criar rotina de backup do banco.
-- Criar limpeza automática de arquivos antigos.
-- Validar melhor os tipos reais dos arquivos enviados.
-- Adicionar histórico de ações administrativas.
-- Testar a impressão no ambiente físico da papelaria.
+- senha admin com hash e usuários no banco;
+- troca de credenciais por variáveis de ambiente;
+- backup automático do SQLite;
+- limpeza automática de uploads antigos;
+- validação mais forte do tipo real dos arquivos;
+- auditoria de ações administrativas;
+- integração PIX real;
+- configuração definitiva de domínio e certificado.
 
 ---
 
-## Status do projeto
+## Hospedagem recomendada
 
-O projeto ainda está em desenvolvimento.
+Para testes locais com impressão automática, o caminho mais simples é Windows Server em VM local ou servidor local na rede da papelaria.
 
-A versão atual já possui o fluxo principal funcionando, mas ainda precisa de ajustes e validações antes de ser usada em produção.
+Como a impressão acontece na máquina onde a aplicação roda, a VM precisa enxergar as impressoras instaladas. Em nuvem, seria necessário VPN, print server ou um agente local de impressão.
+
+Para Windows Server:
+
+- IIS;
+- ASP.NET Core Hosting Bundle do .NET 8;
+- drivers das impressoras;
+- Office instalado, se for imprimir Word/PowerPoint;
+- leitor PDF instalado;
+- permissões de escrita em `App_Data`.
+
+---
+
+## Comandos úteis
+
+Build:
+
+```powershell
+dotnet build --no-restore /p:UseAppHost=false
+```
+
+Publicação:
+
+```powershell
+dotnet publish -c Release -o C:\Sites\PrintShop
+```
+
+Git:
+
+```powershell
+git status
+git add .
+git commit -m "mensagem"
+git push origin main
+```
+
+---
+
+## Status
+
+A versão atual cobre o fluxo principal de pedido, pagamento, acompanhamento, painel administrativo, relatórios e impressão automática local em Windows.
+
+O projeto ainda precisa de validação em ambiente real de papelaria antes de qualquer uso em produção.

@@ -112,6 +112,10 @@ public class AdminController : Controller
 
     private static AdminReportViewModel BuildReport(List<PrintOrder> orders)
     {
+        orders = orders
+            .Where(order => order.Status != OrderStatus.Draft)
+            .ToList();
+
         var activeOrders = orders.Where(order => order.Status != OrderStatus.Cancelled).ToList();
         var confirmedOrders = orders.Where(order => order.PaymentConfirmed).ToList();
         var completedOrders = orders
@@ -175,7 +179,7 @@ public class AdminController : Controller
         order.Files.Sum(file => file.PageCount);
 
     private static int GetTotalPrintedPages(PrintOrder order) =>
-        order.Files.Sum(file => file.PageCount) * order.Copies;
+        order.Files.Sum(file => file.PageCount * Math.Max(1, file.Copies));
 
     private static decimal ReadDecimal(IFormCollection form, string key, decimal fallback)
     {
@@ -195,6 +199,7 @@ public class AdminController : Controller
 
     private static string GetStatusLabel(OrderStatus status) => status switch
     {
+        OrderStatus.Draft => "Em revisao",
         OrderStatus.PendingPayment => "Aguardando pagamento",
         OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         OrderStatus.Printing => "Imprimindo",
