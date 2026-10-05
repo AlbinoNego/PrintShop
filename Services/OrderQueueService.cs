@@ -11,7 +11,8 @@ public class OrderQueueService
     {
         _connectionString = new SqliteConnectionStringBuilder
         {
-            DataSource = Path.Combine(paths.DataPath, "printshop.db")
+            DataSource = Path.Combine(paths.DataPath, "printshop.db"),
+            DefaultTimeout = 5
         }.ToString();
 
         SQLitePCL.Batteries_V2.Init();

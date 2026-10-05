@@ -11,17 +11,20 @@ public class AdminController : Controller
     private readonly OrderQueueService _queue;
     private readonly AdminSettingsService _settings;
     private readonly PrinterService _printer;
+    private readonly PrinterRegistryService _printerRegistry;
 
     public AdminController(
         AdminAuthService auth,
         OrderQueueService queue,
         AdminSettingsService settings,
-        PrinterService printer)
+        PrinterService printer,
+        PrinterRegistryService printerRegistry)
     {
         _auth = auth;
         _queue = queue;
         _settings = settings;
         _printer = printer;
+        _printerRegistry = printerRegistry;
     }
 
     [HttpGet]
@@ -80,6 +83,57 @@ public class AdminController : Controller
 
         ViewBag.Printers = _printer.GetAvailablePrinters();
         return View(_settings.Get());
+    }
+
+    [HttpGet]
+    public IActionResult Printers()
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext))
+        {
+            return RedirectToAction("Login", new { returnUrl = "/Admin/Printers" });
+        }
+
+        return View(new PrinterManagementViewModel
+        {
+            Printers = _printerRegistry.GetPrinters(),
+            Jobs = _printerRegistry.GetRecentJobs(),
+            SystemPrinters = _printer.GetAvailablePrinters()
+        });
+    }
+
+    [HttpPost]
+    public IActionResult AddPrinter(string name, string systemName, bool supportsColor, bool supportsA3, bool supportsDuplex)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
+
+        try
+        {
+            _printerRegistry.AddPrinter(new PrinterDefinition
+            {
+                Name = name,
+                SystemName = systemName,
+                SupportsColor = supportsColor,
+                SupportsA3 = supportsA3,
+                SupportsDuplex = supportsDuplex
+            });
+            TempData["Success"] = "Impressora cadastrada.";
+        }
+        catch (ArgumentException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Printers));
+    }
+
+    [HttpPost]
+    public IActionResult TogglePrinterPause(string id)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
+
+        _printerRegistry.TogglePause(id);
+        TempData["Success"] = "Status da impressora atualizado.";
+        return RedirectToAction(nameof(Printers));
     }
 
     [HttpPost]
@@ -203,6 +257,7 @@ public class AdminController : Controller
         OrderStatus.PendingPayment => "Aguardando pagamento",
         OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         OrderStatus.Printing => "Imprimindo",
+        OrderStatus.PrintFailed => "Falha na impressao",
         OrderStatus.Ready => "Pronto",
         OrderStatus.Delivered => "Entregue",
         OrderStatus.Cancelled => "Cancelado",

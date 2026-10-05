@@ -28,31 +28,11 @@ public class PrinterService
     {
         try
         {
-            var settings = _settings.Get();
-            if (!settings.AutomaticPrintingEnabled)
-            {
-                _logger.LogWarning("Impressao automatica pausada. Pedido {OrderId} nao foi enviado.", order.Id);
-                return false;
-            }
-
             var printedFiles = 0;
 
             foreach (var file in order.Files)
             {
-                var filePath = _fileStorage.GetPath(file.StoredName);
-
-                if (!File.Exists(filePath))
-                {
-                    _logger.LogWarning("Arquivo não encontrado: {File}", filePath);
-                    continue;
-                }
-
-                var fileCopies = Math.Max(1, file.Copies);
-                for (int copy = 0; copy < fileCopies; copy++)
-                {
-                    await PrintFileAsync(filePath, file, order);
-                    printedFiles++;
-                }
+                if (await PrintFileAsync(file, order)) printedFiles++;
             }
 
             return printedFiles > 0;
@@ -64,7 +44,40 @@ public class PrinterService
         }
     }
 
-    private async Task PrintFileAsync(string filePath, UploadedFile file, PrintOrder order)
+    public async Task<bool> PrintFileAsync(UploadedFile file, PrintOrder order)
+    {
+        try
+        {
+            var settings = _settings.Get();
+            if (!settings.AutomaticPrintingEnabled)
+            {
+                _logger.LogWarning("Impressao automatica pausada. Arquivo {File} nao foi enviado.", file.OriginalName);
+                return false;
+            }
+
+            var filePath = _fileStorage.GetPath(file.StoredName);
+            if (!File.Exists(filePath))
+            {
+                _logger.LogWarning("Arquivo nao encontrado: {File}", filePath);
+                return false;
+            }
+
+            var fileCopies = Math.Max(1, file.Copies);
+            for (var copy = 0; copy < fileCopies; copy++)
+            {
+                await PrintDocumentAsync(filePath, file, order);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao imprimir arquivo {File} do pedido {OrderId}", file.OriginalName, order.Id);
+            return false;
+        }
+    }
+
+    private async Task PrintDocumentAsync(string filePath, UploadedFile file, PrintOrder order)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {

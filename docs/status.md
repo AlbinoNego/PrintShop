@@ -1,6 +1,6 @@
 # Status do Projeto - PrintShop
 
-Última atualização: versão estável local após envio para GitHub.
+Última atualização: fila persistente e agente local de impressão em desenvolvimento.
 
 ## Objetivo
 
@@ -41,6 +41,8 @@ Funcionalidades implementadas:
 - HSTS fora de desenvolvimento.
 - Rate limiting global, para upload e para webhook PIX.
 - Webhook PIX genérico em `/Pix/Webhook`.
+- Cadastro de impressoras e fila persistente por arquivo em `/Admin/Printers`.
+- Projeto `PrintShop.Agent`, que processa a fila fora do IIS.
 
 ## GitHub
 
@@ -107,6 +109,7 @@ Services/PricingService.cs
 Services/PrinterService.cs
 Services/AdminSettingsService.cs
 Services/PixService.cs
+Services/PrinterRegistryService.cs
 ```
 
 Models:
@@ -197,20 +200,20 @@ Observação:
 - A configuração de impressoras é feita em `/Admin/Settings`.
 - Quando uma impressora específica é definida, o sistema troca temporariamente a impressora padrão do Windows para imprimir e depois restaura a anterior.
 - Para testes com VM local, a VM precisa enxergar as impressoras instaladas na rede/localmente.
+- O site não imprime mais diretamente após pagamento: ele cria trabalhos no banco e aguarda o `PrintShop.Agent`.
 
 ## Pendências recomendadas
 
 Prioridades futuras:
 
-1. Integração real com provedor PIX.
-2. Login admin mais robusto, com senha com hash e usuários no banco.
-3. Auditoria de ações administrativas.
-4. Backup do SQLite.
-5. Limpeza automática de arquivos antigos.
+1. Transformar o agente em serviço da conta Windows `PrintShopPrint` na VM.
+2. Distribuir automaticamente trabalhos entre várias impressoras compatíveis.
+3. Integrar PIX com um provedor real.
+4. Login admin mais robusto, com senha com hash e usuários no banco.
+5. Auditoria de ações administrativas, backup e limpeza automática de arquivos.
 6. Validação mais forte do tipo real dos arquivos.
 7. Configuração real de domínio e certificado HTTPS em produção.
-8. Melhorias de entrega: bairros, taxa por bairro, saiu para entrega, entregue.
-9. Relatórios por período e exportação CSV/Excel.
+8. Melhorias de entrega, relatórios por período e exportação.
 
 ## Comandos úteis
 

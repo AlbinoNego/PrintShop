@@ -10,25 +10,25 @@ public class OrderController : Controller
 {
     private readonly OrderQueueService _queue;
     private readonly PricingService _pricing;
-    private readonly PrinterService _printer;
     private readonly PixService _pix;
     private readonly PageCountService _pageCounter;
     private readonly FileStorageService _fileStorage;
+    private readonly PrinterRegistryService _printJobs;
 
     private static readonly string[] AllowedExtensions =
         { ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".jpg", ".jpeg", ".png" };
     private const string CustomerOrderIdsSessionKey = "CustomerOrderIds";
 
     public OrderController(OrderQueueService queue, PricingService pricing,
-        PrinterService printer, PixService pix, PageCountService pageCounter,
-        FileStorageService fileStorage)
+        PixService pix, PageCountService pageCounter,
+        FileStorageService fileStorage, PrinterRegistryService printJobs)
     {
         _queue = queue;
         _pricing = pricing;
-        _printer = printer;
         _pix = pix;
         _pageCounter = pageCounter;
         _fileStorage = fileStorage;
+        _printJobs = printJobs;
     }
 
     // GET /Order/New
@@ -407,17 +407,11 @@ public class OrderController : Controller
         }
 
         order.PaymentConfirmed = true;
-        order.Status = OrderStatus.Printing;
+        order.Status = OrderStatus.PaymentConfirmed;
         await _queue.UpdateAsync(order);
+        await _printJobs.EnqueueOrderAsync(order);
 
-        _ = Task.Run(async () =>
-        {
-            var success = await _printer.PrintOrderAsync(order);
-            order.Status = success ? OrderStatus.Ready : OrderStatus.Cancelled;
-            await _queue.UpdateAsync(order);
-        });
-
-        TempData["Success"] = $"Pedido #{order.Id} autorizado para impressao.";
+        TempData["Success"] = $"Pedido #{order.Id} encaminhado para a fila de impressao.";
         return RedirectToAction("Queue");
     }
 
@@ -432,6 +426,7 @@ public class OrderController : Controller
         {
             order.Status = OrderStatus.Cancelled;
             await _queue.UpdateAsync(order);
+            await _printJobs.CancelOpenJobsAsync(order.Id, "Pedido barrado pelo administrador.");
             TempData["Success"] = $"Pedido #{order.Id} barrado.";
         }
 
@@ -462,17 +457,11 @@ public class OrderController : Controller
             return RedirectToAction("Queue");
         }
 
-        order.Status = OrderStatus.Printing;
+        order.Status = OrderStatus.PaymentConfirmed;
         await _queue.UpdateAsync(order);
+        await _printJobs.EnqueueOrderAsync(order, forceNewJobs: true);
 
-        _ = Task.Run(async () =>
-        {
-            var success = await _printer.PrintOrderAsync(order);
-            order.Status = success ? OrderStatus.Ready : OrderStatus.Cancelled;
-            await _queue.UpdateAsync(order);
-        });
-
-        TempData["Success"] = $"Pedido #{order.Id} reenviado para impressao.";
+        TempData["Success"] = $"Pedido #{order.Id} reenviado para a fila de impressao.";
         return RedirectToAction("Queue");
     }
 
@@ -498,6 +487,7 @@ public class OrderController : Controller
         OrderStatus.Draft => "Em revisao",
         OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         OrderStatus.Printing => "Imprimindo...",
+        OrderStatus.PrintFailed => "Falha na impressao",
         OrderStatus.Ready => "Pronto para retirada!",
         OrderStatus.Delivered => "Entregue",
         OrderStatus.Cancelled => "Cancelado",

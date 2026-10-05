@@ -163,7 +163,8 @@
                                 </form>
                             }
                             @if (order.Status == PrintShop.Models.OrderStatus.Ready ||
-                                 order.Status == PrintShop.Models.OrderStatus.Delivered)
+                                 order.Status == PrintShop.Models.OrderStatus.Delivered ||
+                                 order.Status == PrintShop.Models.OrderStatus.PrintFailed)
                             {
                                 <form action="/Order/Reprint" method="post">
                                     <input type="hidden" name="id" value="@order.Id" />
@@ -199,6 +200,7 @@ setTimeout(() => location.reload(), 15000);
         PrintShop.Models.OrderStatus.PendingPayment => "⏳ Aguardando pag.",
         PrintShop.Models.OrderStatus.PaymentConfirmed => "💳 Pago",
         PrintShop.Models.OrderStatus.Printing => "🖨️ Imprimindo",
+        PrintShop.Models.OrderStatus.PrintFailed => "⚠️ Falha na impressao",
         PrintShop.Models.OrderStatus.Ready => "✅ Pronto",
         PrintShop.Models.OrderStatus.Delivered => "📦 Entregue",
         PrintShop.Models.OrderStatus.Cancelled => "❌ Cancelado",

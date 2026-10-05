@@ -12,7 +12,8 @@ public class AdminSettingsService
     {
         _connectionString = new SqliteConnectionStringBuilder
         {
-            DataSource = Path.Combine(paths.DataPath, "printshop.db")
+            DataSource = Path.Combine(paths.DataPath, "printshop.db"),
+            DefaultTimeout = 5
         }.ToString();
 
         EnsureDatabase();

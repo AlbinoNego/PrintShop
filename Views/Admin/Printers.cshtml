@@ -1,0 +1,130 @@
+@model PrintShop.Models.PrinterManagementViewModel
+@using PrintShop.Models
+@{
+    ViewData["Title"] = "Impressoras";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <h1>Impressoras e fila</h1>
+    <p>Cadastre as impressoras da papelaria e acompanhe os arquivos enviados para impressão.</p>
+</div>
+
+<div class="printer-layout">
+    <section class="review-card">
+        <h3>Nova impressora</h3>
+        <form action="/Admin/AddPrinter" method="post" class="printer-form">
+            <div class="field">
+                <label for="name">Nome no painel</label>
+                <input class="text-input" id="name" name="name" required placeholder="Ex.: Laser preto e branco" />
+            </div>
+            <div class="field">
+                <label for="systemName">Impressora instalada no Windows</label>
+                <input class="text-input" id="systemName" name="systemName" list="system-printers" required placeholder="Selecione ou informe o nome" />
+                <datalist id="system-printers">
+                    @foreach (var printer in Model.SystemPrinters)
+                    {
+                        <option value="@printer"></option>
+                    }
+                </datalist>
+            </div>
+            <div class="printer-capabilities">
+                <label><input type="checkbox" name="supportsColor" value="true" /> Colorida</label>
+                <label><input type="checkbox" name="supportsA3" value="true" /> Aceita A3</label>
+                <label><input type="checkbox" name="supportsDuplex" value="true" /> Frente e verso</label>
+            </div>
+            <button type="submit" class="btn-primary">Cadastrar impressora</button>
+        </form>
+    </section>
+
+    <section class="review-card">
+        <h3>Impressoras cadastradas</h3>
+        @if (!Model.Printers.Any())
+        {
+            <p class="muted-copy">Nenhuma impressora cadastrada ainda. O cadastro prepara a distribuição automática, que será ativada na próxima etapa.</p>
+        }
+        else
+        {
+            <div class="printer-list">
+                @foreach (var printer in Model.Printers)
+                {
+                    <div class="printer-row">
+                        <div>
+                            <strong>@printer.Name</strong>
+                            <small>@printer.SystemName</small>
+                            <div class="printer-tags">
+                                @if (printer.SupportsColor) { <span>Colorida</span> }
+                                @if (printer.SupportsA3) { <span>A3</span> }
+                                @if (printer.SupportsDuplex) { <span>Frente e verso</span> }
+                                @if (!printer.SupportsColor && !printer.SupportsA3 && !printer.SupportsDuplex) { <span>Configuração básica</span> }
+                            </div>
+                        </div>
+                        <form action="/Admin/TogglePrinterPause" method="post">
+                            <input type="hidden" name="id" value="@printer.Id" />
+                            <button type="submit" class="btn-action @(printer.IsPaused ? "" : "btn-danger")">
+                                @(printer.IsPaused ? "Retomar" : "Pausar")
+                            </button>
+                        </form>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+<section class="queue-table-wrapper printer-jobs">
+    <div class="section-title-row">
+        <div>
+            <h2>Fila de arquivos</h2>
+            <p>Um trabalho é criado para cada arquivo quando o pedido é autorizado ou o PIX é confirmado.</p>
+        </div>
+        <span class="queue-count">@Model.Jobs.Count registro(s)</span>
+    </div>
+    @if (!Model.Jobs.Any())
+    {
+        <div class="empty-state"><p>Nenhum arquivo foi enviado para a fila ainda.</p></div>
+    }
+    else
+    {
+        <table class="queue-table jobs-table">
+            <thead>
+                <tr>
+                    <th>Pedido</th>
+                    <th>Arquivo</th>
+                    <th>Impressora</th>
+                    <th>Status</th>
+                    <th>Tentativas</th>
+                    <th>Atualizado</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var job in Model.Jobs)
+                {
+                    <tr>
+                        <td><strong>#@job.PrintOrderId</strong></td>
+                        <td>
+                            <span class="file-tag">@job.FileName</span>
+                            @if (!string.IsNullOrWhiteSpace(job.LastError)) { <small class="job-error">@job.LastError</small> }
+                        </td>
+                        <td>@(job.PrinterName ?? "Distribuição pendente")</td>
+                        <td><span class="status-pill job-@job.Status.ToString().ToLower()">@GetJobStatus(job.Status)</span></td>
+                        <td>@job.Attempts</td>
+                        <td>@job.UpdatedAt.ToString("dd/MM HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@functions {
+    string GetJobStatus(PrintJobStatus status) => status switch
+    {
+        PrintJobStatus.Pending => "Aguardando envio",
+        PrintJobStatus.Processing => "Imprimindo",
+        PrintJobStatus.Printed => "Impresso",
+        PrintJobStatus.Failed => "Falhou",
+        PrintJobStatus.Cancelled => "Cancelado",
+        _ => status.ToString()
+    };
+}

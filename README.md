@@ -33,6 +33,8 @@ Este projeto ainda está em desenvolvimento e não deve ser usado em produção 
 - Reimpressão, cancelamento, marcação como pronto e entregue.
 - Relatórios administrativos.
 - Configuração de preços e impressoras pelo admin.
+- Fila persistente de impressão por arquivo.
+- Agente Windows separado para executar a impressão fora do IIS.
 - Webhook PIX genérico.
 - HTTPS, HSTS fora de desenvolvimento e cookies seguros.
 - Rate limiting global, para upload e para webhook.
@@ -178,6 +180,18 @@ As impressoras e preços são configurados em:
 /Admin/Settings
 ```
 
+### Agente de impressão
+
+O site apenas cria trabalhos na fila quando um pagamento é autorizado ou confirmado. O executável `PrintShop.Agent` processa um arquivo por vez, sob a conta Windows destinada à impressão. Isso evita que o IIS abra aplicativos de impressão diretamente.
+
+Para testar o agente localmente, com o site publicado em `C:\Sites\PrintShop`:
+
+```powershell
+dotnet run --project .\PrintShop.Agent\PrintShop.Agent.csproj -- --site-root "C:\Sites\PrintShop"
+```
+
+O agente respeita a opção de impressão automática do painel administrativo. Ao concluir todos os arquivos de um pedido, ele o marca como pronto. Em caso de falha, o pedido fica como `Falha na impressão` para que o administrador possa reenviá-lo.
+
 ---
 
 ## Área administrativa
@@ -189,6 +203,7 @@ Rotas principais:
 /Order/Queue
 /Admin/Reports
 /Admin/Settings
+/Admin/Printers
 ```
 
 No admin é possível:
@@ -204,6 +219,8 @@ No admin é possível:
 - reimprimir;
 - configurar preços;
 - configurar impressoras;
+- cadastrar e pausar impressoras;
+- acompanhar trabalhos individuais da fila de impressão;
 - pausar impressão automática;
 - consultar relatórios.
 
