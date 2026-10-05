@@ -16,7 +16,7 @@ public class AdminUserService
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(paths.DataPath, "printshop.db"),
-            DefaultTimeout = 5
+            DefaultTimeout = 15
         }.ToString();
 
         EnsureDatabase();
@@ -27,21 +27,24 @@ public class AdminUserService
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return null;
 
-        using var connection = CreateConnection();
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Id, Username, PasswordHash, CreatedAt, LastLoginAt
-            FROM AdminUsers WHERE Username = $username COLLATE NOCASE LIMIT 1;
-            """;
-        command.Parameters.AddWithValue("$username", username.Trim());
-        using var reader = command.ExecuteReader();
-        if (!reader.Read()) return null;
+        AdminUser? user;
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT Id, Username, PasswordHash, CreatedAt, LastLoginAt
+                FROM AdminUsers WHERE Username = $username COLLATE NOCASE LIMIT 1;
+                """;
+            command.Parameters.AddWithValue("$username", username.Trim());
+            using var reader = command.ExecuteReader();
+            user = reader.Read() ? ReadUser(reader) : null;
+        }
 
-        var user = ReadUser(reader);
+        if (user == null) return null;
         if (!VerifyPassword(password, user.PasswordHash)) return null;
 
-        RecordLogin(user.Id);
+        TryRecordLogin(user.Id);
         user.LastLoginAt = DateTime.Now;
         return user;
     }
@@ -130,15 +133,22 @@ public class AdminUserService
         insert.ExecuteNonQuery();
     }
 
-    private void RecordLogin(string userId)
+    private void TryRecordLogin(string userId)
     {
-        using var connection = CreateConnection();
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE AdminUsers SET LastLoginAt = $now WHERE Id = $id;";
-        command.Parameters.AddWithValue("$now", DateTime.Now.ToString("O"));
-        command.Parameters.AddWithValue("$id", userId);
-        command.ExecuteNonQuery();
+        try
+        {
+            using var connection = CreateConnection();
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE AdminUsers SET LastLoginAt = $now WHERE Id = $id;";
+            command.Parameters.AddWithValue("$now", DateTime.Now.ToString("O"));
+            command.Parameters.AddWithValue("$id", userId);
+            command.ExecuteNonQuery();
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+        {
+            // Last-login is an audit detail; a temporary SQLite lock must not deny valid access.
+        }
     }
 
     private static string HashPassword(string password)
