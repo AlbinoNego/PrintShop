@@ -56,7 +56,8 @@ public enum OrderStatus
     Printing,
     Ready,
     Delivered,
-    Cancelled
+    Cancelled,
+    PrintFailed
 }
 
 public enum PrintColor

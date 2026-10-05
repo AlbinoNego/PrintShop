@@ -12,18 +12,18 @@ public class PixController : Controller
 
     private readonly IConfiguration _configuration;
     private readonly OrderQueueService _queue;
-    private readonly PrinterService _printer;
+    private readonly PrinterRegistryService _printJobs;
     private readonly ILogger<PixController> _logger;
 
     public PixController(
         IConfiguration configuration,
         OrderQueueService queue,
-        PrinterService printer,
+        PrinterRegistryService printJobs,
         ILogger<PixController> logger)
     {
         _configuration = configuration;
         _queue = queue;
-        _printer = printer;
+        _printJobs = printJobs;
         _logger = logger;
     }
 
@@ -79,15 +79,9 @@ public class PixController : Controller
         }
 
         order.PaymentConfirmed = true;
-        order.Status = OrderStatus.Printing;
+        order.Status = OrderStatus.PaymentConfirmed;
         await _queue.UpdateAsync(order);
-
-        _ = Task.Run(async () =>
-        {
-            var success = await _printer.PrintOrderAsync(order);
-            order.Status = success ? OrderStatus.Ready : OrderStatus.Cancelled;
-            await _queue.UpdateAsync(order);
-        });
+        await _printJobs.EnqueueOrderAsync(order);
 
         return Ok(new { confirmed = true, orderId = order.Id });
     }

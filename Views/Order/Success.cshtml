@@ -108,6 +108,7 @@ const interval = setInterval(async () => {
         PrintShop.Models.OrderStatus.PendingPayment => "Aguardando pagamento",
         PrintShop.Models.OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         PrintShop.Models.OrderStatus.Printing => "Imprimindo seus arquivos...",
+        PrintShop.Models.OrderStatus.PrintFailed => "Ocorreu uma falha na impressao. A papelaria foi avisada.",
         PrintShop.Models.OrderStatus.Ready => Model.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery
             ? "Pronto para entrega!"
             : "Pronto para retirada!",

@@ -8,8 +8,13 @@ public class AppStoragePathService
     public string KeysPath { get; }
 
     public AppStoragePathService(IWebHostEnvironment env)
+        : this(FindProjectRoot(env.ContentRootPath))
     {
-        RootPath = FindProjectRoot(env.ContentRootPath);
+    }
+
+    public AppStoragePathService(string rootPath)
+    {
+        RootPath = rootPath;
         DataPath = Path.Combine(RootPath, "App_Data");
         UploadsPath = Path.Combine(DataPath, "uploads");
         KeysPath = Path.Combine(DataPath, "keys");

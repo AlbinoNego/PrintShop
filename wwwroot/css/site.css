@@ -760,6 +760,35 @@ main { flex: 1; padding: 2.5rem; max-width: 1100px; margin: 0 auto; width: 100%;
     white-space: nowrap;
 }
 
+/* ── Impressoras ── */
+.printer-layout {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.printer-form { display: flex; flex-direction: column; gap: 1rem; }
+.printer-capabilities { display: flex; flex-wrap: wrap; gap: .85rem 1.25rem; }
+.printer-capabilities label { display: flex; align-items: center; gap: .4rem; font-size: .88rem; }
+.printer-list { display: flex; flex-direction: column; gap: .75rem; }
+.printer-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: .75rem; }
+.printer-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.printer-row strong, .printer-row small { display: block; }
+.printer-row small, .muted-copy, .section-title-row p { color: var(--muted); font-size: .83rem; margin-top: .2rem; }
+.printer-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+.printer-tags span { border: 1px solid var(--line); background: var(--bg); border-radius: 4px; color: var(--ink-soft); font-size: .72rem; padding: .18rem .35rem; }
+.printer-jobs { margin-bottom: 2rem; }
+.section-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1.25rem 1.25rem .75rem; }
+.section-title-row h2 { font-family: 'DM Serif Display', serif; font-size: 1.25rem; }
+.queue-count { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.job-error { display: block; color: #b91c1c; margin-top: .3rem; }
+.status-pill.job-pending { background: #fef3c7; color: #92400e; }
+.status-pill.job-processing { background: #dbeafe; color: #1d4ed8; }
+.status-pill.job-printed { background: #d1fae5; color: #047857; }
+.status-pill.job-failed { background: #fee2e2; color: #b91c1c; }
+.status-pill.job-cancelled { background: #e5e7eb; color: #4b5563; }
+.status-pill.printfailed { background: #fee2e2; color: #b91c1c; }
+
 /* ── Alert ── */
 .alert { padding: .9rem 1.25rem; border-radius: 8px; margin-bottom: 1.25rem; font-size: .9rem; }
 .alert-error { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
@@ -781,6 +810,7 @@ footer { padding: 1.5rem 2.5rem; border-top: 1px solid var(--line); text-align: 
     .review-layout { grid-template-columns: 1fr; }
     .queue-stats { grid-template-columns: 1fr 1fr; }
     .queue-filter { grid-template-columns: 1fr; }
+    .printer-layout { grid-template-columns: 1fr; }
     .order-detail-grid { grid-template-columns: 1fr; }
     .queue-table { font-size: .78rem; }
     .file-item {

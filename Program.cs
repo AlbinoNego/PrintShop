@@ -79,6 +79,7 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddSingleton(storagePaths);
 builder.Services.AddSingleton<AdminSettingsService>();
 builder.Services.AddSingleton<OrderQueueService>();
+builder.Services.AddSingleton<PrinterRegistryService>();
 builder.Services.AddSingleton<PrinterService>();
 builder.Services.AddSingleton<PricingService>();
 builder.Services.AddSingleton<PixService>();
@@ -89,6 +90,7 @@ builder.Services.AddSingleton<AdminAuthService>();
 var app = builder.Build();
 
 app.Services.GetRequiredService<OrderQueueService>();
+app.Services.GetRequiredService<PrinterRegistryService>();
 app.Services.GetRequiredService<FileStorageService>();
 
 // Forçar o wwwroot correto
