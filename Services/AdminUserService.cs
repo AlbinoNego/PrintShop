@@ -49,66 +49,6 @@ public class AdminUserService
         return user;
     }
 
-    public AdminUser? GetById(string id)
-    {
-        using var connection = CreateConnection();
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT Id, Username, PasswordHash, CreatedAt, LastLoginAt
-            FROM AdminUsers WHERE Id = $id LIMIT 1;
-            """;
-        command.Parameters.AddWithValue("$id", id);
-        using var reader = command.ExecuteReader();
-        return reader.Read() ? ReadUser(reader) : null;
-    }
-
-    public bool UpdateCredentials(string userId, string currentPassword, string username, string newPassword, out string error)
-    {
-        error = "";
-        username = username.Trim();
-        if (username.Length < 3 || username.Length > 50)
-        {
-            error = "O usuário deve ter entre 3 e 50 caracteres.";
-            return false;
-        }
-
-        if (newPassword.Length < 10)
-        {
-            error = "A nova senha deve ter ao menos 10 caracteres.";
-            return false;
-        }
-
-        var user = GetById(userId);
-        if (user == null || !VerifyPassword(currentPassword, user.PasswordHash))
-        {
-            error = "A senha atual não confere.";
-            return false;
-        }
-
-        using var connection = CreateConnection();
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE AdminUsers
-            SET Username = $username, PasswordHash = $passwordHash
-            WHERE Id = $id;
-            """;
-        command.Parameters.AddWithValue("$username", username);
-        command.Parameters.AddWithValue("$passwordHash", HashPassword(newPassword));
-        command.Parameters.AddWithValue("$id", userId);
-
-        try
-        {
-            return command.ExecuteNonQuery() == 1;
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
-        {
-            error = "Este nome de usuário já está em uso.";
-            return false;
-        }
-    }
-
     private void CreateBootstrapUser()
     {
         using var connection = CreateConnection();

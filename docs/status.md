@@ -138,7 +138,7 @@ Views/Admin/Reports.cshtml
 - Uploads não ficam em `wwwroot`.
 - SQLite é usado como banco local.
 - Cliente não tem login; acompanha pedido por código.
-- O primeiro usuário admin é criado com a configuração local; as credenciais seguintes ficam no banco com senha em hash.
+- O primeiro usuário admin é criado com a configuração local; a senha é armazenada em hash no banco e não pode ser alterada pelo painel.
 - Pedido só pode ser editado antes da confirmação do pagamento.
 - Entrega obriga pagamento via PIX.
 - Retirada pode usar PIX ou pagamento presencial.

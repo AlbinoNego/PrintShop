@@ -8,8 +8,3 @@ public class AdminUser
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime? LastLoginAt { get; set; }
 }
-
-public class AdminAccessViewModel
-{
-    public string Username { get; set; } = "";
-}
