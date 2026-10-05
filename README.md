@@ -192,6 +192,8 @@ dotnet run --project .\PrintShop.Agent\PrintShop.Agent.csproj -- --site-root "C:
 
 O agente respeita a opção de impressão automática do painel administrativo. Ao concluir todos os arquivos de um pedido, ele o marca como pronto. Em caso de falha, o pedido fica como `Falha na impressão` para que o administrador possa reenviá-lo.
 
+Em `/Admin/Printers`, cadastre cada impressora com o nome instalado no Windows e suas capacidades. O agente escolhe automaticamente uma impressora ativa e não pausada que atenda ao pedido (cor, A3 e frente e verso), priorizando a que possui menos trabalhos abertos.
+
 ---
 
 ## Área administrativa
@@ -220,7 +222,9 @@ No admin é possível:
 - configurar preços;
 - configurar impressoras;
 - cadastrar e pausar impressoras;
-- acompanhar trabalhos individuais da fila de impressão;
+- acompanhar a carga das impressoras e os trabalhos individuais da fila de impressão;
+- filtrar trabalhos por status e reenviar falhas;
+- alterar o usuário e a senha do painel em `/Admin/Access`;
 - pausar impressão automática;
 - consultar relatórios.
 

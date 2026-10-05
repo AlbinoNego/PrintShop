@@ -7,8 +7,15 @@
 
 <div class="page-header">
     <h1>Impressoras e fila</h1>
-    <p>Cadastre as impressoras da papelaria e acompanhe os arquivos enviados para impressão.</p>
+    <p>Cadastre as impressoras, acompanhe a fila e reenvie arquivos que apresentarem falha.</p>
 </div>
+
+<section class="print-summary" aria-label="Resumo da fila">
+    <div><strong>@Model.Summary.Pending</strong><span>Na fila</span></div>
+    <div><strong>@Model.Summary.Processing</strong><span>Imprimindo</span></div>
+    <div><strong>@Model.Summary.Failed</strong><span>Com falha</span></div>
+    <div><strong>@Model.Summary.Printed</strong><span>Impressos</span></div>
+</section>
 
 <div class="printer-layout">
     <section class="review-card">
@@ -41,7 +48,7 @@
         <h3>Impressoras cadastradas</h3>
         @if (!Model.Printers.Any())
         {
-            <p class="muted-copy">Nenhuma impressora cadastrada ainda. O cadastro prepara a distribuição automática, que será ativada na próxima etapa.</p>
+            <p class="muted-copy">Nenhuma impressora cadastrada ainda. Cadastre ao menos uma impressora compatível para o agente iniciar os trabalhos.</p>
         }
         else
         {
@@ -58,6 +65,7 @@
                                 @if (printer.SupportsDuplex) { <span>Frente e verso</span> }
                                 @if (!printer.SupportsColor && !printer.SupportsA3 && !printer.SupportsDuplex) { <span>Configuração básica</span> }
                             </div>
+                            <small class="printer-load">@printer.PendingJobs na fila · @printer.ProcessingJobs imprimindo · @printer.FailedJobs falha(s)</small>
                         </div>
                         <form action="/Admin/TogglePrinterPause" method="post">
                             <input type="hidden" name="id" value="@printer.Id" />
@@ -78,7 +86,16 @@
             <h2>Fila de arquivos</h2>
             <p>Um trabalho é criado para cada arquivo quando o pedido é autorizado ou o PIX é confirmado.</p>
         </div>
-        <span class="queue-count">@Model.Jobs.Count registro(s)</span>
+        <form method="get" action="/Admin/Printers" class="job-filter">
+            <label for="status">Exibir</label>
+            <select id="status" name="status" onchange="this.form.submit()">
+                <option value="">Todos</option>
+                @foreach (var status in Enum.GetValues<PrintJobStatus>())
+                {
+                    <option value="@status" selected="@(Model.SelectedStatus == status)">@GetJobStatus(status)</option>
+                }
+            </select>
+        </form>
     </div>
     @if (!Model.Jobs.Any())
     {
@@ -95,6 +112,7 @@
                     <th>Status</th>
                     <th>Tentativas</th>
                     <th>Atualizado</th>
+                    <th>Ação</th>
                 </tr>
             </thead>
             <tbody>
@@ -110,6 +128,19 @@
                         <td><span class="status-pill job-@job.Status.ToString().ToLower()">@GetJobStatus(job.Status)</span></td>
                         <td>@job.Attempts</td>
                         <td>@job.UpdatedAt.ToString("dd/MM HH:mm")</td>
+                        <td>
+                            @if (job.Status is PrintJobStatus.Failed or PrintJobStatus.Cancelled)
+                            {
+                                <form action="/Admin/RetryPrintJob" method="post">
+                                    <input type="hidden" name="id" value="@job.Id" />
+                                    <button type="submit" class="btn-action">Reenviar</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="muted-copy">—</span>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>

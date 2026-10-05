@@ -111,8 +111,9 @@ static async Task ProcessJobAsync(
     order.Status = OrderStatus.Printing;
     await queue.UpdateAsync(order);
 
-    logger.LogInformation("Imprimindo trabalho {JobId}: pedido {OrderId}, arquivo {FileName}", job.Id, order.Id, file.OriginalName);
-    var success = await printer.PrintFileAsync(file, order);
+    logger.LogInformation("Imprimindo trabalho {JobId}: pedido {OrderId}, arquivo {FileName}, impressora {Printer}",
+        job.Id, order.Id, file.OriginalName, job.PrinterName ?? "nao definida");
+    var success = await printer.PrintFileAsync(file, order, job.PrinterSystemName);
 
     if (!success)
     {

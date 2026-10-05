@@ -64,6 +64,14 @@ builder.Services.AddRateLimiter(options =>
         limiter.AutoReplenishment = true;
     });
 
+    options.AddFixedWindowLimiter("admin-login", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(15);
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -85,6 +93,7 @@ builder.Services.AddSingleton<PricingService>();
 builder.Services.AddSingleton<PixService>();
 builder.Services.AddSingleton<PageCountService>();
 builder.Services.AddSingleton<FileStorageService>();
+builder.Services.AddSingleton<AdminUserService>();
 builder.Services.AddSingleton<AdminAuthService>();
 
 var app = builder.Build();
@@ -92,6 +101,7 @@ var app = builder.Build();
 app.Services.GetRequiredService<OrderQueueService>();
 app.Services.GetRequiredService<PrinterRegistryService>();
 app.Services.GetRequiredService<FileStorageService>();
+app.Services.GetRequiredService<AdminUserService>();
 
 // Forçar o wwwroot correto
 app.Environment.WebRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PrintShop.Models;
 using PrintShop.Services;
 using System.Globalization;
@@ -12,19 +13,22 @@ public class AdminController : Controller
     private readonly AdminSettingsService _settings;
     private readonly PrinterService _printer;
     private readonly PrinterRegistryService _printerRegistry;
+    private readonly AdminUserService _users;
 
     public AdminController(
         AdminAuthService auth,
         OrderQueueService queue,
         AdminSettingsService settings,
         PrinterService printer,
-        PrinterRegistryService printerRegistry)
+        PrinterRegistryService printerRegistry,
+        AdminUserService users)
     {
         _auth = auth;
         _queue = queue;
         _settings = settings;
         _printer = printer;
         _printerRegistry = printerRegistry;
+        _users = users;
     }
 
     [HttpGet]
@@ -53,23 +57,28 @@ public class AdminController : Controller
     }
 
     [HttpPost]
+    [EnableRateLimiting("admin-login")]
     public IActionResult Login(string username, string password, string? returnUrl = null)
     {
-        if (!_auth.Validate(username, password))
+        var user = _auth.Validate(username, password);
+        if (user == null)
         {
             TempData["Error"] = "Usuario ou senha invalidos.";
             ViewBag.ReturnUrl = returnUrl ?? "/Order/Queue";
             return View();
         }
 
+        HttpContext.Session.Clear();
         HttpContext.Session.SetString(AdminAuthService.SessionKey, "true");
+        HttpContext.Session.SetString(AdminAuthService.UserIdSessionKey, user.Id);
+        HttpContext.Session.SetString(AdminAuthService.UsernameSessionKey, user.Username);
         return Redirect(returnUrl ?? "/Order/Queue");
     }
 
     [HttpPost]
     public IActionResult Logout()
     {
-        HttpContext.Session.Remove(AdminAuthService.SessionKey);
+        HttpContext.Session.Clear();
         return RedirectToAction("Index", "Home");
     }
 
@@ -86,7 +95,7 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult Printers()
+    public IActionResult Printers(PrintJobStatus? status = null)
     {
         if (!AdminAuthService.IsLoggedIn(HttpContext))
         {
@@ -96,8 +105,10 @@ public class AdminController : Controller
         return View(new PrinterManagementViewModel
         {
             Printers = _printerRegistry.GetPrinters(),
-            Jobs = _printerRegistry.GetRecentJobs(),
-            SystemPrinters = _printer.GetAvailablePrinters()
+            Jobs = _printerRegistry.GetRecentJobs(status),
+            SystemPrinters = _printer.GetAvailablePrinters(),
+            Summary = _printerRegistry.GetJobSummary(),
+            SelectedStatus = status
         });
     }
 
@@ -134,6 +145,65 @@ public class AdminController : Controller
         _printerRegistry.TogglePause(id);
         TempData["Success"] = "Status da impressora atualizado.";
         return RedirectToAction(nameof(Printers));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> RetryPrintJob(long id)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
+
+        var orderId = await _printerRegistry.RetryJobAsync(id);
+        if (orderId == null)
+        {
+            TempData["Error"] = "Somente trabalhos com falha ou cancelados podem ser reenviados.";
+            return RedirectToAction(nameof(Printers));
+        }
+
+        var order = await _queue.GetAsync(orderId);
+        if (order != null && order.Status != OrderStatus.Cancelled)
+        {
+            order.Status = OrderStatus.PaymentConfirmed;
+            await _queue.UpdateAsync(order);
+        }
+
+        TempData["Success"] = "Arquivos pendentes deste pedido foram reenviados para a fila de impressão.";
+        return RedirectToAction(nameof(Printers));
+    }
+
+    [HttpGet]
+    public IActionResult Access()
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext))
+        {
+            return RedirectToAction("Login", new { returnUrl = "/Admin/Access" });
+        }
+
+        var user = _users.GetById(HttpContext.Session.GetString(AdminAuthService.UserIdSessionKey) ?? "");
+        if (user == null)
+        {
+            HttpContext.Session.Clear();
+            return RedirectToAction("Login");
+        }
+
+        return View(new AdminAccessViewModel { Username = user.Username });
+    }
+
+    [HttpPost]
+    public IActionResult Access(string currentPassword, string username, string newPassword)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
+
+        var userId = HttpContext.Session.GetString(AdminAuthService.UserIdSessionKey);
+        var error = "";
+        if (string.IsNullOrWhiteSpace(userId) || !_users.UpdateCredentials(userId, currentPassword, username, newPassword, out error))
+        {
+            TempData["Error"] = string.IsNullOrWhiteSpace(error) ? "Não foi possível atualizar o acesso." : error;
+            return RedirectToAction(nameof(Access));
+        }
+
+        HttpContext.Session.SetString(AdminAuthService.UsernameSessionKey, username.Trim());
+        TempData["Success"] = "Dados de acesso atualizados.";
+        return RedirectToAction(nameof(Access));
     }
 
     [HttpPost]

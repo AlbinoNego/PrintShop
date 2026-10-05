@@ -29,7 +29,7 @@ Funcionalidades implementadas:
 - Entrega vai direto para PIX.
 - Retirada permite PIX ou pagamento na loja.
 - Pedido fica como rascunho durante a revisão e só entra no painel admin após confirmação da forma de pagamento.
-- Painel admin com login.
+- Painel admin com login persistido em SQLite e senha protegida por hash PBKDF2.
 - Admin pode autorizar pagamento, barrar pedido, marcar como pronto, marcar como entregue e reimprimir.
 - Painel admin tem busca, filtro por status e detalhes do pedido.
 - Relatórios administrativos.
@@ -39,9 +39,9 @@ Funcionalidades implementadas:
 - HTTPS configurado.
 - Cookies de sessão seguros.
 - HSTS fora de desenvolvimento.
-- Rate limiting global, para upload e para webhook PIX.
+- Rate limiting global, para upload, webhook PIX e tentativas de login administrativo.
 - Webhook PIX genérico em `/Pix/Webhook`.
-- Cadastro de impressoras e fila persistente por arquivo em `/Admin/Printers`.
+- Cadastro de impressoras, distribuição automática por capacidade/carga e fila persistente por arquivo em `/Admin/Printers`.
 - Projeto `PrintShop.Agent`, que processa a fila fora do IIS.
 
 ## GitHub
@@ -138,7 +138,7 @@ Views/Admin/Reports.cshtml
 - Uploads não ficam em `wwwroot`.
 - SQLite é usado como banco local.
 - Cliente não tem login; acompanha pedido por código.
-- Admin tem login simples por configuração.
+- O primeiro usuário admin é criado com a configuração local; as credenciais seguintes ficam no banco com senha em hash.
 - Pedido só pode ser editado antes da confirmação do pagamento.
 - Entrega obriga pagamento via PIX.
 - Retirada pode usar PIX ou pagamento presencial.
@@ -207,13 +207,11 @@ Observação:
 Prioridades futuras:
 
 1. Transformar o agente em serviço da conta Windows `PrintShopPrint` na VM.
-2. Distribuir automaticamente trabalhos entre várias impressoras compatíveis.
-3. Integrar PIX com um provedor real.
-4. Login admin mais robusto, com senha com hash e usuários no banco.
-5. Auditoria de ações administrativas, backup e limpeza automática de arquivos.
-6. Validação mais forte do tipo real dos arquivos.
-7. Configuração real de domínio e certificado HTTPS em produção.
-8. Melhorias de entrega, relatórios por período e exportação.
+2. Integrar PIX com um provedor real.
+3. Auditoria de ações administrativas, backup e limpeza automática de arquivos.
+4. Validação mais forte do tipo real dos arquivos.
+5. Configuração real de domínio e certificado HTTPS em produção.
+6. Melhorias de entrega, relatórios por período e exportação.
 
 ## Comandos úteis
 

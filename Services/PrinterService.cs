@@ -44,7 +44,7 @@ public class PrinterService
         }
     }
 
-    public async Task<bool> PrintFileAsync(UploadedFile file, PrintOrder order)
+    public async Task<bool> PrintFileAsync(UploadedFile file, PrintOrder order, string? printerOverride = null)
     {
         try
         {
@@ -65,7 +65,7 @@ public class PrinterService
             var fileCopies = Math.Max(1, file.Copies);
             for (var copy = 0; copy < fileCopies; copy++)
             {
-                await PrintDocumentAsync(filePath, file, order);
+                await PrintDocumentAsync(filePath, file, order, printerOverride);
             }
 
             return true;
@@ -77,11 +77,11 @@ public class PrinterService
         }
     }
 
-    private async Task PrintDocumentAsync(string filePath, UploadedFile file, PrintOrder order)
+    private async Task PrintDocumentAsync(string filePath, UploadedFile file, PrintOrder order, string? printerOverride)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            await PrintOnWindowsAsync(filePath, file, order);
+            await PrintOnWindowsAsync(filePath, file, order, printerOverride);
         }
         else
         {
@@ -93,10 +93,12 @@ public class PrinterService
     }
 
     [SupportedOSPlatform("windows")]
-    private async Task PrintOnWindowsAsync(string filePath, UploadedFile file, PrintOrder order)
+    private async Task PrintOnWindowsAsync(string filePath, UploadedFile file, PrintOrder order, string? printerOverride)
     {
         var ext = Path.GetExtension(file.OriginalName).ToLower();
-        var selectedPrinter = ResolvePrinterName(ext);
+        var selectedPrinter = string.IsNullOrWhiteSpace(printerOverride)
+            ? ResolvePrinterName(ext)
+            : printerOverride;
         var originalPrinter = string.IsNullOrWhiteSpace(selectedPrinter) ? "" : GetDefaultPrinterName();
 
         try

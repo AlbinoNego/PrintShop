@@ -778,6 +778,14 @@ main { flex: 1; padding: 2.5rem; max-width: 1100px; margin: 0 auto; width: 100%;
 .printer-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
 .printer-tags span { border: 1px solid var(--line); background: var(--bg); border-radius: 4px; color: var(--ink-soft); font-size: .72rem; padding: .18rem .35rem; }
 .printer-jobs { margin-bottom: 2rem; }
+.print-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin: 1.25rem 0; }
+.print-summary div { border: 1px solid var(--line); border-radius: var(--radius); padding: .9rem 1rem; background: var(--surface); }
+.print-summary strong, .print-summary span { display: block; }
+.print-summary strong { font-family: var(--font-display); font-size: 1.5rem; }
+.print-summary span { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
+.printer-load { margin-top: .55rem !important; }
+.job-filter { display: flex; align-items: center; gap: .45rem; font-size: .82rem; }
+.job-filter select { padding: .38rem .55rem; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink); }
 .section-title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1.25rem 1.25rem .75rem; }
 .section-title-row h2 { font-family: 'DM Serif Display', serif; font-size: 1.25rem; }
 .queue-count { color: var(--muted); font-size: .8rem; white-space: nowrap; }
@@ -811,6 +819,7 @@ footer { padding: 1.5rem 2.5rem; border-top: 1px solid var(--line); text-align: 
     .queue-stats { grid-template-columns: 1fr 1fr; }
     .queue-filter { grid-template-columns: 1fr; }
     .printer-layout { grid-template-columns: 1fr; }
+    .print-summary { grid-template-columns: repeat(2, 1fr); }
     .order-detail-grid { grid-template-columns: 1fr; }
     .queue-table { font-size: .78rem; }
     .file-item {
