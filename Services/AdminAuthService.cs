@@ -5,8 +5,6 @@ public class AdminAuthService
     private readonly AdminUserService _users;
 
     public const string SessionKey = "AdminLoggedIn";
-    public const string UserIdSessionKey = "AdminUserId";
-    public const string UsernameSessionKey = "AdminUsername";
 
     public AdminAuthService(AdminUserService users)
     {

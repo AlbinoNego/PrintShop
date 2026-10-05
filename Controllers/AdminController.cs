@@ -13,22 +13,19 @@ public class AdminController : Controller
     private readonly AdminSettingsService _settings;
     private readonly PrinterService _printer;
     private readonly PrinterRegistryService _printerRegistry;
-    private readonly AdminUserService _users;
 
     public AdminController(
         AdminAuthService auth,
         OrderQueueService queue,
         AdminSettingsService settings,
         PrinterService printer,
-        PrinterRegistryService printerRegistry,
-        AdminUserService users)
+        PrinterRegistryService printerRegistry)
     {
         _auth = auth;
         _queue = queue;
         _settings = settings;
         _printer = printer;
         _printerRegistry = printerRegistry;
-        _users = users;
     }
 
     [HttpGet]
@@ -70,8 +67,6 @@ public class AdminController : Controller
 
         HttpContext.Session.Clear();
         HttpContext.Session.SetString(AdminAuthService.SessionKey, "true");
-        HttpContext.Session.SetString(AdminAuthService.UserIdSessionKey, user.Id);
-        HttpContext.Session.SetString(AdminAuthService.UsernameSessionKey, user.Username);
         return Redirect(returnUrl ?? "/Order/Queue");
     }
 
@@ -168,42 +163,6 @@ public class AdminController : Controller
 
         TempData["Success"] = "Arquivos pendentes deste pedido foram reenviados para a fila de impressão.";
         return RedirectToAction(nameof(Printers));
-    }
-
-    [HttpGet]
-    public IActionResult Access()
-    {
-        if (!AdminAuthService.IsLoggedIn(HttpContext))
-        {
-            return RedirectToAction("Login", new { returnUrl = "/Admin/Access" });
-        }
-
-        var user = _users.GetById(HttpContext.Session.GetString(AdminAuthService.UserIdSessionKey) ?? "");
-        if (user == null)
-        {
-            HttpContext.Session.Clear();
-            return RedirectToAction("Login");
-        }
-
-        return View(new AdminAccessViewModel { Username = user.Username });
-    }
-
-    [HttpPost]
-    public IActionResult Access(string currentPassword, string username, string newPassword)
-    {
-        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
-
-        var userId = HttpContext.Session.GetString(AdminAuthService.UserIdSessionKey);
-        var error = "";
-        if (string.IsNullOrWhiteSpace(userId) || !_users.UpdateCredentials(userId, currentPassword, username, newPassword, out error))
-        {
-            TempData["Error"] = string.IsNullOrWhiteSpace(error) ? "Não foi possível atualizar o acesso." : error;
-            return RedirectToAction(nameof(Access));
-        }
-
-        HttpContext.Session.SetString(AdminAuthService.UsernameSessionKey, username.Trim());
-        TempData["Success"] = "Dados de acesso atualizados.";
-        return RedirectToAction(nameof(Access));
     }
 
     [HttpPost]

@@ -224,7 +224,6 @@ No admin é possível:
 - cadastrar e pausar impressoras;
 - acompanhar a carga das impressoras e os trabalhos individuais da fila de impressão;
 - filtrar trabalhos por status e reenviar falhas;
-- alterar o usuário e a senha do painel em `/Admin/Access`;
 - pausar impressão automática;
 - consultar relatórios.
 
