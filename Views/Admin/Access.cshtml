@@ -1,0 +1,28 @@
+@model PrintShop.Models.AdminAccessViewModel
+@{
+    ViewData["Title"] = "Acesso administrativo";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="admin-login">
+    <div class="page-header">
+        <h1>Acesso administrativo</h1>
+        <p>Altere o usuário e a senha usados para acessar o painel.</p>
+    </div>
+
+    <form action="/Admin/Access" method="post" class="login-card">
+        <div class="field">
+            <label for="username">Usuário</label>
+            <input type="text" name="username" id="username" class="text-input" value="@Model.Username" minlength="3" maxlength="50" autocomplete="username" required />
+        </div>
+        <div class="field">
+            <label for="currentPassword">Senha atual</label>
+            <input type="password" name="currentPassword" id="currentPassword" class="text-input" autocomplete="current-password" required />
+        </div>
+        <div class="field">
+            <label for="newPassword">Nova senha</label>
+            <input type="password" name="newPassword" id="newPassword" class="text-input" minlength="10" autocomplete="new-password" required />
+        </div>
+        <button type="submit" class="btn-primary btn-lg btn-full">Atualizar acesso</button>
+    </form>
+</div>

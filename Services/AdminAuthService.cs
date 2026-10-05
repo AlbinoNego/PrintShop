@@ -2,23 +2,18 @@ namespace PrintShop.Services;
 
 public class AdminAuthService
 {
-    private readonly IConfiguration _configuration;
+    private readonly AdminUserService _users;
 
     public const string SessionKey = "AdminLoggedIn";
+    public const string UserIdSessionKey = "AdminUserId";
+    public const string UsernameSessionKey = "AdminUsername";
 
-    public AdminAuthService(IConfiguration configuration)
+    public AdminAuthService(AdminUserService users)
     {
-        _configuration = configuration;
+        _users = users;
     }
 
-    public bool Validate(string username, string password)
-    {
-        var configuredUser = _configuration["PrintShop:Admin:Username"] ?? "admin";
-        var configuredPassword = _configuration["PrintShop:Admin:Password"] ?? "admin123";
-
-        return string.Equals(username, configuredUser, StringComparison.Ordinal) &&
-               string.Equals(password, configuredPassword, StringComparison.Ordinal);
-    }
+    public PrintShop.Models.AdminUser? Validate(string username, string password) => _users.Authenticate(username, password);
 
     public static bool IsLoggedIn(HttpContext context) =>
         context.Session.GetString(SessionKey) == "true";
