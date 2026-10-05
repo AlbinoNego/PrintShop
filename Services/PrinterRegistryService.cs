@@ -83,20 +83,7 @@ public class PrinterRegistryService
         var jobs = new List<PrintJob>();
         while (reader.Read())
         {
-            jobs.Add(new PrintJob
-            {
-                Id = reader.GetInt64(0),
-                PrintOrderId = reader.GetString(1),
-                UploadedFileId = reader.GetInt32(2),
-                FileName = reader.IsDBNull(3) ? "Arquivo removido" : reader.GetString(3),
-                PrinterId = reader.IsDBNull(4) ? null : reader.GetString(4),
-                PrinterName = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Status = (PrintJobStatus)reader.GetInt32(6),
-                Attempts = reader.GetInt32(7),
-                LastError = reader.IsDBNull(8) ? null : reader.GetString(8),
-                CreatedAt = DateTime.Parse(reader.GetString(9)),
-                UpdatedAt = DateTime.Parse(reader.GetString(10))
-            });
+            jobs.Add(ReadJob(reader));
         }
 
         return jobs;
