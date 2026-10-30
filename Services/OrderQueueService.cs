@@ -32,12 +32,14 @@ public class OrderQueueService
                 (Id, CreatedAt, Status, Color, Copies, PaperType, Laminate, Sides,
                  PaymentMethod, TotalPrice, PixCode, PaymentConfirmed, CustomerName, CustomerPhone,
                  FulfillmentMethod, DeliveryAddress, DeliveryNumber, DeliveryNeighborhood, DeliveryComplement, DeliveryFee,
-                 Orientation)
+                 Orientation, CustomerEmail, PixQrCodeBase64, PixExpiresAt, MercadoPagoPaymentId,
+                 MercadoPagoStatus, MercadoPagoIdempotencyKey)
             VALUES
                 ($id, $createdAt, $status, $color, $copies, $paperType, $laminate, $sides,
                  $paymentMethod, $totalPrice, $pixCode, $paymentConfirmed, $customerName, $customerPhone,
                  $fulfillmentMethod, $deliveryAddress, $deliveryNumber, $deliveryNeighborhood, $deliveryComplement, $deliveryFee,
-                 $orientation);
+                 $orientation, $customerEmail, $pixQrCodeBase64, $pixExpiresAt, $mercadoPagoPaymentId,
+                 $mercadoPagoStatus, $mercadoPagoIdempotencyKey);
             """;
         AddOrderParameters(command, order);
         await command.ExecuteNonQueryAsync();
@@ -97,7 +99,13 @@ public class OrderQueueService
                 DeliveryNeighborhood = $deliveryNeighborhood,
                 DeliveryComplement = $deliveryComplement,
                 DeliveryFee = $deliveryFee,
-                Orientation = $orientation
+                Orientation = $orientation,
+                CustomerEmail = $customerEmail,
+                PixQrCodeBase64 = $pixQrCodeBase64,
+                PixExpiresAt = $pixExpiresAt,
+                MercadoPagoPaymentId = $mercadoPagoPaymentId,
+                MercadoPagoStatus = $mercadoPagoStatus,
+                MercadoPagoIdempotencyKey = $mercadoPagoIdempotencyKey
             WHERE Id = $id;
             """;
         AddOrderParameters(command, order);
@@ -200,7 +208,13 @@ public class OrderQueueService
                 DeliveryNeighborhood TEXT NOT NULL DEFAULT '',
                 DeliveryComplement TEXT NOT NULL DEFAULT '',
                 DeliveryFee REAL NOT NULL DEFAULT 0,
-                Orientation INTEGER NOT NULL DEFAULT 0
+                Orientation INTEGER NOT NULL DEFAULT 0,
+                CustomerEmail TEXT NULL,
+                PixQrCodeBase64 TEXT NULL,
+                PixExpiresAt TEXT NULL,
+                MercadoPagoPaymentId TEXT NULL,
+                MercadoPagoStatus TEXT NULL,
+                MercadoPagoIdempotencyKey TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS UploadedFiles (
@@ -226,6 +240,12 @@ public class OrderQueueService
         EnsureColumn(connection, "Orders", "DeliveryComplement", "TEXT NOT NULL DEFAULT ''");
         EnsureColumn(connection, "Orders", "DeliveryFee", "REAL NOT NULL DEFAULT 0");
         EnsureColumn(connection, "Orders", "Orientation", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(connection, "Orders", "CustomerEmail", "TEXT NULL");
+        EnsureColumn(connection, "Orders", "PixQrCodeBase64", "TEXT NULL");
+        EnsureColumn(connection, "Orders", "PixExpiresAt", "TEXT NULL");
+        EnsureColumn(connection, "Orders", "MercadoPagoPaymentId", "TEXT NULL");
+        EnsureColumn(connection, "Orders", "MercadoPagoStatus", "TEXT NULL");
+        EnsureColumn(connection, "Orders", "MercadoPagoIdempotencyKey", "TEXT NULL");
         EnsureColumn(connection, "UploadedFiles", "Copies", "INTEGER NOT NULL DEFAULT 1");
     }
 
@@ -242,7 +262,8 @@ public class OrderQueueService
                 o.Id, o.CreatedAt, o.Status, o.Color, o.Copies, o.PaperType, o.Laminate, o.Sides,
                 o.PaymentMethod, o.TotalPrice, o.PixCode, o.PaymentConfirmed, o.CustomerName, o.CustomerPhone,
                 o.FulfillmentMethod, o.DeliveryAddress, o.DeliveryNumber, o.DeliveryNeighborhood, o.DeliveryComplement, o.DeliveryFee,
-                o.Orientation,
+                o.Orientation, o.CustomerEmail, o.PixQrCodeBase64, o.PixExpiresAt, o.MercadoPagoPaymentId,
+                o.MercadoPagoStatus, o.MercadoPagoIdempotencyKey,
                 f.Id, f.PrintOrderId, f.OriginalName, f.StoredName, f.ContentType, f.SizeBytes, f.PageCount, f.Copies
             FROM Orders o
             LEFT JOIN UploadedFiles f ON f.PrintOrderId = o.Id
@@ -280,23 +301,29 @@ public class OrderQueueService
                     DeliveryNeighborhood = reader.GetString(17),
                     DeliveryComplement = reader.GetString(18),
                     DeliveryFee = Convert.ToDecimal(reader.GetDouble(19)),
-                    Orientation = (PrintOrientation)reader.GetInt32(20)
+                    Orientation = (PrintOrientation)reader.GetInt32(20),
+                    CustomerEmail = reader.IsDBNull(21) ? null : reader.GetString(21),
+                    PixQrCodeBase64 = reader.IsDBNull(22) ? null : reader.GetString(22),
+                    PixExpiresAt = reader.IsDBNull(23) ? null : DateTime.Parse(reader.GetString(23)),
+                    MercadoPagoPaymentId = reader.IsDBNull(24) ? null : reader.GetString(24),
+                    MercadoPagoStatus = reader.IsDBNull(25) ? null : reader.GetString(25),
+                    MercadoPagoIdempotencyKey = reader.IsDBNull(26) ? null : reader.GetString(26)
                 };
                 byId[orderId] = order;
             }
 
-            if (!reader.IsDBNull(21))
+            if (!reader.IsDBNull(27))
             {
                 order.Files.Add(new UploadedFile
                 {
-                    Id = reader.GetInt32(21),
-                    PrintOrderId = reader.GetString(22),
-                    OriginalName = reader.GetString(23),
-                    StoredName = reader.GetString(24),
-                    ContentType = reader.GetString(25),
-                    SizeBytes = reader.GetInt64(26),
-                    PageCount = reader.GetInt32(27),
-                    Copies = reader.GetInt32(28)
+                    Id = reader.GetInt32(27),
+                    PrintOrderId = reader.GetString(28),
+                    OriginalName = reader.GetString(29),
+                    StoredName = reader.GetString(30),
+                    ContentType = reader.GetString(31),
+                    SizeBytes = reader.GetInt64(32),
+                    PageCount = reader.GetInt32(33),
+                    Copies = reader.GetInt32(34)
                 });
             }
         }
@@ -327,6 +354,12 @@ public class OrderQueueService
         command.Parameters.AddWithValue("$deliveryComplement", order.DeliveryComplement ?? "");
         command.Parameters.AddWithValue("$deliveryFee", Convert.ToDouble(order.DeliveryFee));
         command.Parameters.AddWithValue("$orientation", (int)order.Orientation);
+        command.Parameters.AddWithValue("$customerEmail", (object?)order.CustomerEmail ?? DBNull.Value);
+        command.Parameters.AddWithValue("$pixQrCodeBase64", (object?)order.PixQrCodeBase64 ?? DBNull.Value);
+        command.Parameters.AddWithValue("$pixExpiresAt", order.PixExpiresAt?.ToString("O") ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("$mercadoPagoPaymentId", (object?)order.MercadoPagoPaymentId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$mercadoPagoStatus", (object?)order.MercadoPagoStatus ?? DBNull.Value);
+        command.Parameters.AddWithValue("$mercadoPagoIdempotencyKey", (object?)order.MercadoPagoIdempotencyKey ?? DBNull.Value);
     }
 
     private static void AddFileParameters(SqliteCommand command, string orderId, UploadedFile file)

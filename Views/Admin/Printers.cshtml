@@ -124,8 +124,17 @@
                             <span class="file-tag">@job.FileName</span>
                             @if (!string.IsNullOrWhiteSpace(job.LastError)) { <small class="job-error">@job.LastError</small> }
                         </td>
-                        <td>@(job.PrinterName ?? "Distribuição pendente")</td>
-                        <td><span class="status-pill job-@job.Status.ToString().ToLower()">@GetJobStatus(job.Status)</span></td>
+                        <td>@(job.RequiresPrinterAttention ? "Sem impressora compatível" : job.PrinterName ?? "Distribuição pendente")</td>
+                        <td>
+                            @if (job.RequiresPrinterAttention)
+                            {
+                                <span class="status-pill job-attention">Configurar impressora</span>
+                            }
+                            else
+                            {
+                                <span class="status-pill job-@job.Status.ToString().ToLower()">@GetJobStatus(job.Status)</span>
+                            }
+                        </td>
                         <td>@job.Attempts</td>
                         <td>@job.UpdatedAt.ToString("dd/MM HH:mm")</td>
                         <td>

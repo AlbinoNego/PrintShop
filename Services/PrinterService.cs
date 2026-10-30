@@ -150,10 +150,7 @@ public class PrinterService
             };
 
             using var process = Process.Start(startInfo);
-            if (process != null)
-            {
-                await process.WaitForExitAsync();
-            }
+            await WaitForExitOrKillAsync(process, file.OriginalName);
         }
         finally
         {
@@ -181,12 +178,56 @@ public class PrinterService
         };
 
         using var process = Process.Start(startInfo);
-        if (process != null)
-        {
-            await process.WaitForExitAsync();
-        }
+        await WaitForExitOrKillAsync(process, file.OriginalName);
 
         await Task.Delay(1000);
+    }
+
+    // Leitores como o Acrobat podem ficar abertos depois de imprimir; sem limite o agente
+    // travaria para sempre no mesmo trabalho. Tempo esgotado conta como falha para revisao.
+    private TimeSpan GetPrintProcessTimeout() =>
+        TimeSpan.FromSeconds(Math.Clamp(
+            _configuration.GetValue<int?>("PrintShop:PrintProcessTimeoutSeconds") ?? 180, 30, 1800));
+
+    private async Task WaitForExitOrKillAsync(Process? process, string fileName)
+    {
+        if (process == null) return;
+
+        using var timeout = new CancellationTokenSource(GetPrintProcessTimeout());
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            KillPrintProcess(process, fileName);
+        }
+    }
+
+    private void WaitForExitOrKill(Process? process, string fileName)
+    {
+        if (process == null) return;
+
+        if (!process.WaitForExit(GetPrintProcessTimeout()))
+        {
+            KillPrintProcess(process, fileName);
+        }
+    }
+
+    private void KillPrintProcess(Process process, string fileName)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // O processo pode ter terminado entre o tempo esgotado e o Kill.
+        }
+
+        _logger.LogWarning("Processo de impressao de {File} excedeu o tempo limite e foi encerrado.", fileName);
+        throw new TimeoutException(
+            $"Tempo esgotado ao imprimir {fileName}. Confira se saiu na impressora antes de reenviar.");
     }
 
     [SupportedOSPlatform("windows")]
@@ -257,7 +298,7 @@ public class PrinterService
                 PrintPdfFile(tempPdfPath, printerName);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not TimeoutException)
             {
                 _logger.LogWarning(
                     ex,
@@ -342,7 +383,7 @@ public class PrinterService
                 PrintPdfFile(tempPdfPath, printerName);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not TimeoutException)
             {
                 _logger.LogWarning(
                     ex,
@@ -462,7 +503,7 @@ public class PrinterService
             };
 
             using var shellProcess = Process.Start(shellStartInfo);
-            shellProcess?.WaitForExit();
+            WaitForExitOrKill(shellProcess, Path.GetFileName(filePath));
             Thread.Sleep(5000);
             return;
         }
@@ -478,7 +519,7 @@ public class PrinterService
         };
 
         using var process = Process.Start(startInfo);
-        process?.WaitForExit();
+        WaitForExitOrKill(process, Path.GetFileName(filePath));
         Thread.Sleep(5000);
     }
 

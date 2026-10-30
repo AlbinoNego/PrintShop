@@ -31,14 +31,19 @@ public class AdminController : Controller
     [HttpGet]
     public IActionResult Login(string? returnUrl = null)
     {
+        returnUrl = SafeReturnUrl(returnUrl);
         if (AdminAuthService.IsLoggedIn(HttpContext))
         {
-            return Redirect(returnUrl ?? "/Order/Queue");
+            return LocalRedirect(returnUrl);
         }
 
-        ViewBag.ReturnUrl = returnUrl ?? "/Order/Queue";
+        ViewBag.ReturnUrl = returnUrl;
         return View();
     }
+
+    // Aceita somente caminhos do proprio site para evitar redirecionamento para dominio externo.
+    private string SafeReturnUrl(string? returnUrl) =>
+        !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : "/Order/Queue";
 
     [HttpGet]
     public async Task<IActionResult> Reports()
@@ -57,17 +62,18 @@ public class AdminController : Controller
     [EnableRateLimiting("admin-login")]
     public IActionResult Login(string username, string password, string? returnUrl = null)
     {
+        returnUrl = SafeReturnUrl(returnUrl);
         var user = _auth.Validate(username, password);
         if (user == null)
         {
             TempData["Error"] = "Usuario ou senha invalidos.";
-            ViewBag.ReturnUrl = returnUrl ?? "/Order/Queue";
+            ViewBag.ReturnUrl = returnUrl;
             return View();
         }
 
         HttpContext.Session.Clear();
         HttpContext.Session.SetString(AdminAuthService.SessionKey, "true");
-        return Redirect(returnUrl ?? "/Order/Queue");
+        return LocalRedirect(returnUrl);
     }
 
     [HttpPost]

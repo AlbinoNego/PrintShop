@@ -99,10 +99,6 @@ O arquivo versionado usa valores genéricos:
 ```json
 {
   "PrintShop": {
-    "PixKey": "configure-sua-chave-pix",
-    "MerchantName": "NOME DA LOJA",
-    "MerchantCity": "CIDADE",
-    "PixWebhookSecret": "configure-um-segredo-forte",
     "MaxFileSizeMB": 50,
     "PrintExecutables": {
       "Pdf": "",
@@ -216,7 +212,6 @@ No admin é possível:
 - ver detalhes;
 - autorizar pagamento;
 - barrar pedido;
-- marcar como pronto;
 - marcar como entregue;
 - reimprimir;
 - configurar preços;
@@ -229,15 +224,29 @@ No admin é possível:
 
 ---
 
-## PIX
+## PIX Mercado Pago
 
-O endpoint de webhook é:
+O PIX é criado pela API do Mercado Pago. O cliente recebe o QR Code e o código copia-e-cola retornados pelo provedor; a impressão só entra na fila após um webhook confirmado.
 
-```http
-POST /Pix/Webhook
+Crie `appsettings.Local.json` a partir de `appsettings.Local.example.json`. Esse arquivo é ignorado pelo Git. Para o Checkout Transparente via Orders, o Access Token de teste do Mercado Pago começa com `APP_USR-`:
+
+```json
+{
+  "MercadoPago": {
+    "AccessToken": "APP_USR-seu-access-token-de-teste",
+    "WebhookSecret": "sua-assinatura-secreta-do-webhook",
+    "PixExpirationMinutes": 1440
+  }
+}
 ```
 
-A implementação atual é genérica. Para produção, precisa adaptar ao banco ou gateway usado, validar assinatura/evento e registrar logs de confirmação.
+No painel do Mercado Pago, configure o evento **Orders** para a URL pública abaixo:
+
+```http
+POST /Pix/MercadoPagoWebhook
+```
+
+O endpoint valida a assinatura do Mercado Pago, consulta a order na API e confere identificador, valor, moeda e referência antes de confirmar o pedido.
 
 ---
 
@@ -261,7 +270,6 @@ Ainda precisa melhorar antes de produção:
 - limpeza automática de uploads antigos;
 - validação mais forte do tipo real dos arquivos;
 - auditoria de ações administrativas;
-- integração PIX real;
 - configuração definitiva de domínio e certificado.
 
 ---

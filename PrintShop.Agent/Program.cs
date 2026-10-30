@@ -43,6 +43,8 @@ var printer = new PrinterService(
     configuration,
     settings);
 var logger = loggerFactory.CreateLogger("PrintShop.Agent");
+var agentId = Guid.NewGuid().ToString("N");
+var leaseDuration = TimeSpan.FromMinutes(30);
 
 using var stopping = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -53,10 +55,38 @@ Console.CancelKeyPress += (_, eventArgs) =>
 
 logger.LogInformation("Agente de impressao iniciado. Pasta do site: {SiteRoot}", siteRoot);
 
+if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
+{
+    logger.LogCritical("Outro agente de impressao ja esta ativo para esta pasta do site.");
+    return 1;
+}
+
 try
 {
+    var staleOrderIds = await jobs.FailStaleProcessingJobsAsync(TimeSpan.FromMinutes(30));
+    foreach (var orderId in staleOrderIds.Distinct())
+    {
+        var staleOrder = await queue.GetAsync(orderId);
+        if (staleOrder == null || staleOrder.Status == OrderStatus.Cancelled) continue;
+
+        await jobs.CancelOpenJobsAsync(orderId, "Cancelado após interrupção anterior do agente de impressão.");
+        staleOrder.Status = OrderStatus.PrintFailed;
+        await queue.UpdateAsync(staleOrder);
+    }
+
+    if (staleOrderIds.Count > 0)
+    {
+        logger.LogWarning("{Count} trabalho(s) interrompido(s) foram marcados como falha para revisão.", staleOrderIds.Count);
+    }
+
     while (!stopping.IsCancellationRequested)
     {
+        if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
+        {
+            logger.LogCritical("O agente perdeu a concessão exclusiva de impressão e será encerrado.");
+            return 1;
+        }
+
         if (!settings.Get().AutomaticPrintingEnabled)
         {
             await Task.Delay(TimeSpan.FromSeconds(pollSeconds), stopping.Token);
@@ -81,6 +111,10 @@ catch (Exception ex)
 {
     logger.LogCritical(ex, "O agente de impressao foi interrompido por um erro nao tratado.");
     return 1;
+}
+finally
+{
+    await jobs.ReleaseAgentLeaseAsync(agentId);
 }
 
 return 0;

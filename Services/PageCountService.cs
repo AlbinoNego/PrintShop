@@ -25,9 +25,49 @@ public class PageCountService
         using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream, System.Text.Encoding.Latin1);
         var content = reader.ReadToEnd();
-        var matches = Regex.Matches(content, @"/Type\s*/Page\b");
+        var pages = Regex.Matches(content, @"/Type\s*/Page\b").Count;
 
-        return Math.Max(1, matches.Count);
+        // PDFs modernos podem guardar os objetos de pagina comprimidos em object streams;
+        // sem descompactar, um documento de muitas paginas seria cobrado como 1.
+        foreach (var objectStream in ReadCompressedObjectStreams(content))
+        {
+            pages += Regex.Matches(objectStream, @"/Type\s*/Page\b").Count;
+        }
+
+        return Math.Max(1, pages);
+    }
+
+    private static IEnumerable<string> ReadCompressedObjectStreams(string content)
+    {
+        foreach (Match type in Regex.Matches(content, @"/Type\s*/ObjStm\b"))
+        {
+            var dictionaryStart = content.LastIndexOf(" obj", type.Index, StringComparison.Ordinal);
+            var streamKeyword = content.IndexOf("stream", type.Index, StringComparison.Ordinal);
+            if (dictionaryStart < 0 || streamKeyword < 0) continue;
+            if (content.IndexOf("/FlateDecode", dictionaryStart, streamKeyword - dictionaryStart, StringComparison.Ordinal) < 0) continue;
+
+            var start = streamKeyword + "stream".Length;
+            if (start < content.Length && content[start] == '\r') start++;
+            if (start < content.Length && content[start] == '\n') start++;
+            var end = content.IndexOf("endstream", start, StringComparison.Ordinal);
+            if (end < 0) continue;
+
+            string? decoded = null;
+            try
+            {
+                var compressed = System.Text.Encoding.Latin1.GetBytes(content.Substring(start, end - start));
+                using var input = new MemoryStream(compressed);
+                using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+                using var output = new StreamReader(zlib, System.Text.Encoding.Latin1);
+                decoded = output.ReadToEnd();
+            }
+            catch (InvalidDataException)
+            {
+                // Stream danificado: fica so com a contagem dos objetos nao comprimidos.
+            }
+
+            if (decoded != null) yield return decoded;
+        }
     }
 
     private static int CountPowerPointSlides(string filePath)

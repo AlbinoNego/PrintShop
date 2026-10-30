@@ -154,14 +154,6 @@
                                     <button type="submit" class="btn-action btn-danger">Barrar</button>
                                 </form>
                             }
-                            @if (order.Status == PrintShop.Models.OrderStatus.Printing ||
-                                 order.Status == PrintShop.Models.OrderStatus.PaymentConfirmed)
-                            {
-                                <form action="/Order/MarkReady" method="post">
-                                    <input type="hidden" name="id" value="@order.Id" />
-                                    <button type="submit" class="btn-action">Pronto</button>
-                                </form>
-                            }
                             @if (order.Status == PrintShop.Models.OrderStatus.Ready ||
                                  order.Status == PrintShop.Models.OrderStatus.Delivered ||
                                  order.Status == PrintShop.Models.OrderStatus.PrintFailed)

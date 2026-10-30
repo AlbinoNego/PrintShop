@@ -40,7 +40,7 @@ Funcionalidades implementadas:
 - Cookies de sessão seguros.
 - HSTS fora de desenvolvimento.
 - Rate limiting global, para upload, webhook PIX e tentativas de login administrativo.
-- Webhook PIX genérico em `/Pix/Webhook`.
+- PIX Mercado Pago integrado pela Orders API, com QR Code dinâmico, idempotência e webhook assinado em `/Pix/MercadoPagoWebhook`.
 - Cadastro de impressoras, distribuição automática por capacidade/carga e fila persistente por arquivo em `/Admin/Printers`.
 - Projeto `PrintShop.Agent`, que processa a fila fora do IIS.
 
@@ -86,7 +86,7 @@ Admin:
 Webhook:
 
 ```text
-POST /Pix/Webhook
+POST /Pix/MercadoPagoWebhook
 ```
 
 ## Arquivos importantes
@@ -108,7 +108,7 @@ Services/PageCountService.cs
 Services/PricingService.cs
 Services/PrinterService.cs
 Services/AdminSettingsService.cs
-Services/PixService.cs
+Services/MercadoPagoPixService.cs
 Services/PrinterRegistryService.cs
 ```
 
@@ -142,7 +142,7 @@ Views/Admin/Reports.cshtml
 - Pedido só pode ser editado antes da confirmação do pagamento.
 - Entrega obriga pagamento via PIX.
 - Retirada pode usar PIX ou pagamento presencial.
-- Webhook PIX é genérico e precisa ser adaptado ao provedor real.
+- PIX Mercado Pago gera cobrança dinâmica, verifica valor, moeda e referência no webhook antes de liberar a impressão.
 - Impressão usa aplicativos instalados no Windows e ações de impressão do sistema.
 - PDFs enviados pelo cliente não são alterados pelo fluxo de orientação.
 - Configuração de impressoras fica somente na área admin.
@@ -155,12 +155,16 @@ O `appsettings.json` foi deixado com valores genéricos para GitHub.
 Antes de produção, configurar:
 
 ```text
-PrintShop:PixKey
-PrintShop:MerchantName
-PrintShop:MerchantCity
-PrintShop:PixWebhookSecret
 PrintShop:Admin:Username
 PrintShop:Admin:Password
+```
+
+Para PIX Mercado Pago, usar `appsettings.Local.json` ou variáveis de ambiente:
+
+```text
+MercadoPago:AccessToken
+MercadoPago:WebhookSecret
+MercadoPago:PixExpirationMinutes
 ```
 
 Recomendado usar variáveis de ambiente ou outro provedor seguro de configuração em produção.
@@ -207,11 +211,10 @@ Observação:
 Prioridades futuras:
 
 1. Transformar o agente em serviço da conta Windows `PrintShopPrint` na VM.
-2. Integrar PIX com um provedor real.
-3. Auditoria de ações administrativas, backup e limpeza automática de arquivos.
-4. Validação mais forte do tipo real dos arquivos.
-5. Configuração real de domínio e certificado HTTPS em produção.
-6. Melhorias de entrega, relatórios por período e exportação.
+2. Auditoria de ações administrativas, backup e limpeza automática de arquivos.
+3. Validação mais forte do tipo real dos arquivos.
+4. Configuração real de domínio e certificado HTTPS em produção.
+5. Melhorias de entrega, relatórios por período e exportação.
 
 ## Comandos úteis
 

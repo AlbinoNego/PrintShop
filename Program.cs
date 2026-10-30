@@ -5,6 +5,9 @@ using System.Threading.RateLimiting;
 using PrintShop.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration
+    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false)
+    .AddEnvironmentVariables();
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -48,41 +51,28 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddFixedWindowLimiter("uploads", limiter =>
-    {
-        limiter.PermitLimit = 20;
-        limiter.Window = TimeSpan.FromMinutes(10);
-        limiter.QueueLimit = 0;
-        limiter.AutoReplenishment = true;
-    });
-
-    options.AddFixedWindowLimiter("pix-webhook", limiter =>
-    {
-        limiter.PermitLimit = 60;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-        limiter.AutoReplenishment = true;
-    });
-
-    options.AddFixedWindowLimiter("admin-login", limiter =>
-    {
-        limiter.PermitLimit = 10;
-        limiter.Window = TimeSpan.FromMinutes(15);
-        limiter.QueueLimit = 0;
-        limiter.AutoReplenishment = true;
-    });
+    // Todas as politicas sao por IP: uma janela unica para o site inteiro faria o 21o cliente
+    // receber 429 e deixaria qualquer pessoa bloquear o login do admin.
+    options.AddPolicy("uploads", context => PerIpFixedWindow(context, 20, TimeSpan.FromMinutes(10)));
+    options.AddPolicy("pix-webhook", context => PerIpFixedWindow(context, 60, TimeSpan.FromMinutes(1)));
+    options.AddPolicy("admin-login", context => PerIpFixedWindow(context, 10, TimeSpan.FromMinutes(15)));
+    // O codigo do pedido funciona como senha de acesso; limita tentativas de adivinhacao.
+    options.AddPolicy("order-lookup", context => PerIpFixedWindow(context, 15, TimeSpan.FromMinutes(10)));
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 120,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
+        PerIpFixedWindow(context, 120, TimeSpan.FromMinutes(1)));
 });
+
+static RateLimitPartition<string> PerIpFixedWindow(HttpContext context, int permitLimit, TimeSpan window) =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = window,
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
 
 builder.Services.AddSingleton(storagePaths);
 builder.Services.AddSingleton<AdminSettingsService>();
@@ -90,7 +80,7 @@ builder.Services.AddSingleton<OrderQueueService>();
 builder.Services.AddSingleton<PrinterRegistryService>();
 builder.Services.AddSingleton<PrinterService>();
 builder.Services.AddSingleton<PricingService>();
-builder.Services.AddSingleton<PixService>();
+builder.Services.AddHttpClient<MercadoPagoPixService>();
 builder.Services.AddSingleton<PageCountService>();
 builder.Services.AddSingleton<FileStorageService>();
 builder.Services.AddSingleton<AdminUserService>();
@@ -107,6 +97,17 @@ app.Services.GetRequiredService<AdminUserService>();
 app.Environment.WebRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 
 app.UseForwardedHeaders();
+
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    headers["Content-Security-Policy"] = "frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+    await next();
+});
 
 if (!app.Environment.IsDevelopment())
 {

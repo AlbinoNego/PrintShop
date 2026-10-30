@@ -27,7 +27,11 @@ App_Data/keys/
 *.tmp
 
 # Local secrets / machine-specific configuration
+# appsettings.json fica so na maquina; o modelo versionado e appsettings.example.json
+appsettings.json
 appsettings.Local.json
+# Perfil local com URL de tunel; o perfil versionado fica em Properties/launchSettings.json
+/launchSettings.json
 appsettings.*.Local.json
 .env
 .env.*

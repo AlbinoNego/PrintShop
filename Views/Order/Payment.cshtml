@@ -16,7 +16,7 @@
         <form action="/Order/ConfirmPayment" method="post">
             <input type="hidden" name="id" value="@Model.Id" />
 
-            <label class="payment-card @(true ? "selected" : "")" id="pixCard">
+            <label class="payment-card selected" id="pixCard">
                 <input type="radio" name="paymentMethod" value="Pix" checked onchange="selectPayment(this)" />
                 <div class="payment-card-inner">
                     <div class="payment-icon">⚡</div>
@@ -28,17 +28,29 @@
                 </div>
             </label>
 
-            <label class="payment-card" id="storeCard">
-                <input type="radio" name="paymentMethod" value="InStore" onchange="selectPayment(this)" />
-                <div class="payment-card-inner">
-                    <div class="payment-icon">🏪</div>
-                    <div>
-                        <strong>Pagar na loja</strong>
-                        <p>O pedido fica reservado para conferência e pagamento presencial na papelaria.</p>
+            @if (Model.FulfillmentMethod != PrintShop.Models.FulfillmentMethod.Delivery)
+            {
+                <label class="payment-card" id="storeCard">
+                    <input type="radio" name="paymentMethod" value="InStore" onchange="selectPayment(this)" />
+                    <div class="payment-card-inner">
+                        <div class="payment-icon">🏪</div>
+                        <div>
+                            <strong>Pagar na loja</strong>
+                            <p>O pedido fica reservado para conferência e pagamento presencial na papelaria.</p>
+                        </div>
+                        <div class="payment-check">✓</div>
                     </div>
-                    <div class="payment-check">✓</div>
+                </label>
+            }
+
+            <div class="pix-payer-fields" id="pixPayerFields">
+                <div class="field">
+                    <label for="payerEmail">E-mail para o pagamento PIX</label>
+                    <input type="email" name="payerEmail" id="payerEmail" class="text-input"
+                           value="@Model.CustomerEmail" autocomplete="email" required />
                 </div>
-            </label>
+                <p class="form-hint">O e-mail é enviado ao Mercado Pago para gerar a cobrança PIX.</p>
+            </div>
 
             <div class="total-reminder">
                 <span>Total a pagar:</span>
@@ -58,6 +70,15 @@
 function selectPayment(radio) {
     document.querySelectorAll('.payment-card').forEach(c => c.classList.remove('selected'));
     radio.closest('.payment-card').classList.add('selected');
+    const isPix = radio.value === 'Pix';
+    const fields = document.getElementById('pixPayerFields');
+    fields.hidden = !isPix;
+    fields.querySelectorAll('input').forEach(input => {
+        input.disabled = !isPix;
+        input.required = isPix;
+    });
 }
+
+selectPayment(document.querySelector('input[name="paymentMethod"]:checked'));
 </script>
 }

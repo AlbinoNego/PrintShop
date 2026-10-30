@@ -499,7 +499,19 @@ main { flex: 1; padding: 2.5rem; max-width: 1100px; margin: 0 auto; width: 100%;
 .pix-amount span { color: var(--muted); font-size: .85rem; display: block; }
 .pix-amount strong { font-size: 2.2rem; font-family: 'DM Serif Display', serif; }
 .qr-container { display: flex; justify-content: center; margin-bottom: 1.5rem; }
-.qr-image { border: 8px solid var(--surface); box-shadow: var(--shadow); border-radius: 8px; }
+.qr-image {
+    width: 240px;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: contain;
+    border: 8px solid var(--surface);
+    box-shadow: var(--shadow);
+    border-radius: 8px;
+}
+@media (max-width: 480px) {
+    .qr-image { width: 220px; }
+}
 .pix-copy label { font-size: .82rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); display: block; margin-bottom: .4rem; }
 .pix-code-wrapper { display: flex; gap: .5rem; }
 .pix-code { flex: 1; font-size: .65rem; padding: .6rem; border: 1px solid var(--line); border-radius: 6px; resize: none; height: 60px; font-family: monospace; color: var(--ink-soft); }
@@ -795,6 +807,7 @@ main { flex: 1; padding: 2.5rem; max-width: 1100px; margin: 0 auto; width: 100%;
 .status-pill.job-printed { background: #d1fae5; color: #047857; }
 .status-pill.job-failed { background: #fee2e2; color: #b91c1c; }
 .status-pill.job-cancelled { background: #e5e7eb; color: #4b5563; }
+.status-pill.job-attention { background: #ffedd5; color: #c2410c; }
 .status-pill.printfailed { background: #fee2e2; color: #b91c1c; }
 
 /* ── Alert ── */

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using PrintShop.Models;
@@ -8,74 +9,104 @@ namespace PrintShop.Controllers;
 [Route("Pix")]
 public class PixController : Controller
 {
-    private const string WebhookSecretHeader = "X-PrintShop-Webhook-Secret";
-
-    private readonly IConfiguration _configuration;
     private readonly OrderQueueService _queue;
     private readonly PrinterRegistryService _printJobs;
+    private readonly MercadoPagoPixService _mercadoPagoPix;
     private readonly ILogger<PixController> _logger;
 
     public PixController(
-        IConfiguration configuration,
         OrderQueueService queue,
         PrinterRegistryService printJobs,
+        MercadoPagoPixService mercadoPagoPix,
         ILogger<PixController> logger)
     {
-        _configuration = configuration;
         _queue = queue;
         _printJobs = printJobs;
+        _mercadoPagoPix = mercadoPagoPix;
         _logger = logger;
     }
 
-    [HttpPost("Webhook")]
+    [HttpPost("MercadoPagoWebhook")]
     [EnableRateLimiting("pix-webhook")]
-    public async Task<IActionResult> Webhook([FromBody] PixWebhookRequest request)
+    public async Task<IActionResult> MercadoPagoWebhook()
     {
-        if (!IsAuthorizedWebhook())
+        var paymentId = Request.Query["data.id"].FirstOrDefault() ?? Request.Query["data_id"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(paymentId))
         {
+            paymentId = await ReadPaymentIdFromBodyAsync();
+        }
+
+        if (string.IsNullOrWhiteSpace(paymentId))
+        {
+            return BadRequest(new { error = "Identificador do pagamento ausente." });
+        }
+
+        if (!_mercadoPagoPix.IsValidWebhookSignature(Request, paymentId))
+        {
+            _logger.LogWarning("Webhook do Mercado Pago rejeitado por assinatura inválida.");
             return Unauthorized();
         }
 
-        if (string.IsNullOrWhiteSpace(request.OrderId))
+        MercadoPagoPixPayment payment;
+        try
         {
-            return BadRequest(new { error = "orderId obrigatorio." });
+            payment = await _mercadoPagoPix.GetPixOrderAsync(paymentId);
+        }
+        catch (MercadoPagoPixException ex)
+        {
+            _logger.LogWarning("Não foi possível consultar o pagamento {PaymentId}: {Reason}", paymentId, ex.Message);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        if (!IsPaidStatus(request.Status))
+        if (string.IsNullOrWhiteSpace(payment.ExternalReference))
         {
-            return Ok(new { ignored = true, reason = "Status nao representa pagamento confirmado." });
+            return Ok(new { ignored = true, reason = "Pagamento sem referência do pedido." });
         }
 
-        var order = await _queue.GetAsync(NormalizeOrderId(request.OrderId));
-        if (order == null)
+        var order = await _queue.GetAsync(payment.ExternalReference);
+        if (order == null || order.PaymentMethod != PaymentMethod.Pix)
         {
-            return NotFound(new { error = "Pedido nao encontrado." });
+            return Ok(new { ignored = true, reason = "Pedido não encontrado ou sem PIX." });
         }
 
-        if (order.PaymentMethod != PaymentMethod.Pix)
+        if (!string.Equals(order.MercadoPagoPaymentId, payment.Id, StringComparison.Ordinal))
         {
-            return BadRequest(new { error = "Pedido nao usa PIX." });
+            // Cobranca substituida (pedido editado ou PIX regenerado). Reenviar o webhook nao muda nada,
+            // entao responde 200; se ela foi paga, o dinheiro entrou e precisa de conferencia manual.
+            if (payment.IsApproved)
+            {
+                _logger.LogCritical(
+                    "PIX {PaymentId} aprovado para cobranca substituida do pedido {OrderId}. Conferir e estornar ou confirmar manualmente.",
+                    paymentId, order.Id);
+            }
+
+            return Ok(new { ignored = true, reason = "Cobranca substituida." });
         }
 
-        if (request.Amount.HasValue && Math.Round(request.Amount.Value, 2) != Math.Round(order.TotalPrice, 2))
+        if (!string.Equals(payment.CurrencyId, "BRL", StringComparison.OrdinalIgnoreCase) ||
+            Math.Round(order.TotalPrice, 2) != Math.Round(payment.Amount, 2))
         {
-            _logger.LogWarning(
-                "Webhook PIX com valor divergente. Pedido {OrderId}. Esperado {Expected}. Recebido {Received}.",
-                order.Id,
-                order.TotalPrice,
-                request.Amount.Value);
-
-            return BadRequest(new { error = "Valor divergente." });
+            _logger.LogWarning("Webhook PIX divergente para pedido {OrderId} e pagamento {PaymentId}.", order.Id, paymentId);
+            return BadRequest(new { error = "Dados do pagamento divergentes." });
         }
 
-        if (order.PaymentConfirmed || order.Status is OrderStatus.Printing or OrderStatus.Ready or OrderStatus.Delivered)
+        order.MercadoPagoStatus = payment.Status;
+        if (!payment.IsApproved)
         {
-            return Ok(new { confirmed = true, duplicate = true, orderId = order.Id });
+            await _queue.UpdateAsync(order);
+            return Ok(new { received = true, approved = false });
         }
 
         if (order.Status == OrderStatus.Cancelled)
         {
-            return BadRequest(new { error = "Pedido cancelado." });
+            _logger.LogWarning("Pagamento aprovado para pedido cancelado {OrderId}.", order.Id);
+            await _queue.UpdateAsync(order);
+            return Ok(new { received = true, cancelled = true });
+        }
+
+        if (order.PaymentConfirmed)
+        {
+            return Ok(new { received = true, duplicate = true });
         }
 
         order.PaymentConfirmed = true;
@@ -83,36 +114,28 @@ public class PixController : Controller
         await _queue.UpdateAsync(order);
         await _printJobs.EnqueueOrderAsync(order);
 
-        return Ok(new { confirmed = true, orderId = order.Id });
+        _logger.LogInformation("PIX aprovado e pedido {OrderId} enviado à fila.", order.Id);
+        return Ok(new { received = true, approved = true });
     }
 
-    private bool IsAuthorizedWebhook()
+    private async Task<string?> ReadPaymentIdFromBodyAsync()
     {
-        var configuredSecret = _configuration["PrintShop:PixWebhookSecret"];
-        if (string.IsNullOrWhiteSpace(configuredSecret))
+        if (Request.ContentLength is null or 0) return null;
+
+        try
         {
-            _logger.LogWarning("Webhook PIX chamado, mas PrintShop:PixWebhookSecret nao esta configurado.");
-            return false;
+            using var document = await JsonDocument.ParseAsync(Request.Body);
+            var root = document.RootElement;
+            if (root.TryGetProperty("data", out var data) && data.TryGetProperty("id", out var id))
+            {
+                return id.ToString();
+            }
+
+            return root.TryGetProperty("id", out var directId) ? directId.ToString() : null;
         }
-
-        var receivedSecret = Request.Headers[WebhookSecretHeader].FirstOrDefault();
-        return string.Equals(receivedSecret, configuredSecret, StringComparison.Ordinal);
+        catch (JsonException)
+        {
+            return null;
+        }
     }
-
-    private static bool IsPaidStatus(string? status) =>
-        string.Equals(status, "paid", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(status, "approved", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(status, "confirmed", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase);
-
-    private static string NormalizeOrderId(string? id) =>
-        (id ?? "").Trim().TrimStart('#').ToUpperInvariant();
-}
-
-public class PixWebhookRequest
-{
-    public string? OrderId { get; set; }
-    public string? Status { get; set; }
-    public decimal? Amount { get; set; }
-    public string? PaymentId { get; set; }
 }

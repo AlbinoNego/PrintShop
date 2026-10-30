@@ -12,7 +12,7 @@ public class PrinterRegistryService
         _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = Path.Combine(paths.DataPath, "printshop.db"),
-            DefaultTimeout = 5
+            DefaultTimeout = 15
         }.ToString();
 
         EnsureDatabase();
@@ -68,16 +68,29 @@ public class PrinterRegistryService
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT j.Id, j.PrintOrderId, j.UploadedFileId, f.OriginalName, j.PrinterId, p.Name, p.SystemName,
-                   j.Status, j.Attempts, j.LastError, j.CreatedAt, j.UpdatedAt
+                   j.Status, j.Attempts, j.LastError, j.CreatedAt, j.UpdatedAt,
+                   CASE WHEN j.Status = $pending AND NOT EXISTS (
+                       SELECT 1
+                       FROM Printers compatible
+                       WHERE compatible.IsActive = 1 AND compatible.IsPaused = 0
+                            AND (orderOptions.Color <> $color OR compatible.SupportsColor = 1)
+                            AND (orderOptions.PaperType <> $a3 OR compatible.SupportsA3 = 1)
+                            AND (orderOptions.Sides <> $duplex OR compatible.SupportsDuplex = 1)
+                   ) THEN 1 ELSE 0 END AS RequiresPrinterAttention
             FROM PrintJobs j
             LEFT JOIN UploadedFiles f ON f.Id = j.UploadedFileId
             LEFT JOIN Printers p ON p.Id = j.PrinterId
+            LEFT JOIN Orders orderOptions ON orderOptions.Id = j.PrintOrderId
             WHERE ($status IS NULL OR j.Status = $status)
             ORDER BY j.CreatedAt DESC
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 200));
         command.Parameters.AddWithValue("$status", status is null ? DBNull.Value : (int)status.Value);
+        command.Parameters.AddWithValue("$pending", (int)PrintJobStatus.Pending);
+        command.Parameters.AddWithValue("$color", (int)PrintColor.Color);
+        command.Parameters.AddWithValue("$a3", (int)PaperType.A3_75g);
+        command.Parameters.AddWithValue("$duplex", (int)PrintSides.BothSides);
 
         using var reader = command.ExecuteReader();
         var jobs = new List<PrintJob>();
@@ -205,7 +218,7 @@ public class PrinterRegistryService
         select.Transaction = (SqliteTransaction)transaction;
         select.CommandText = """
             SELECT j.Id, j.PrintOrderId, j.UploadedFileId, f.OriginalName, p.Id, p.Name, p.SystemName,
-                   j.Status, j.Attempts, j.LastError, j.CreatedAt, j.UpdatedAt
+                   j.Status, j.Attempts, j.LastError, j.CreatedAt, j.UpdatedAt, 0 AS RequiresPrinterAttention
             FROM PrintJobs j
             JOIN Orders o ON o.Id = j.PrintOrderId
             JOIN Printers p ON p.IsActive = 1 AND p.IsPaused = 0
@@ -279,6 +292,78 @@ public class PrinterRegistryService
         command.Parameters.AddWithValue("$now", DateTime.Now.ToString("O"));
         command.Parameters.AddWithValue("$id", jobId);
         command.Parameters.AddWithValue("$processing", (int)PrintJobStatus.Processing);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<List<string>> FailStaleProcessingJobsAsync(TimeSpan maximumAge)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        var threshold = DateTime.Now.Subtract(maximumAge).ToString("O");
+        var orderIds = new List<string>();
+
+        var read = connection.CreateCommand();
+        read.Transaction = (SqliteTransaction)transaction;
+        read.CommandText = """
+            SELECT DISTINCT PrintOrderId
+            FROM PrintJobs
+            WHERE Status = $processing AND UpdatedAt < $threshold;
+            """;
+        read.Parameters.AddWithValue("$processing", (int)PrintJobStatus.Processing);
+        read.Parameters.AddWithValue("$threshold", threshold);
+        await using (var reader = await read.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync()) orderIds.Add(reader.GetString(0));
+        }
+
+        if (orderIds.Count > 0)
+        {
+            var update = connection.CreateCommand();
+            update.Transaction = (SqliteTransaction)transaction;
+            update.CommandText = """
+                UPDATE PrintJobs
+                SET Status = $failed,
+                    LastError = 'Trabalho interrompido: o agente de impressão foi reiniciado ou ficou indisponível.',
+                    UpdatedAt = $now
+                WHERE Status = $processing AND UpdatedAt < $threshold;
+                """;
+            update.Parameters.AddWithValue("$failed", (int)PrintJobStatus.Failed);
+            update.Parameters.AddWithValue("$now", DateTime.Now.ToString("O"));
+            update.Parameters.AddWithValue("$processing", (int)PrintJobStatus.Processing);
+            update.Parameters.AddWithValue("$threshold", threshold);
+            await update.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+        return orderIds;
+    }
+
+    public async Task<bool> TryAcquireAgentLeaseAsync(string ownerId, TimeSpan duration)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        var now = DateTime.Now;
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO PrintAgentLeases (Id, OwnerId, ExpiresAt)
+            VALUES (1, $ownerId, $expiresAt)
+            ON CONFLICT(Id) DO UPDATE SET OwnerId = $ownerId, ExpiresAt = $expiresAt
+            WHERE PrintAgentLeases.OwnerId = $ownerId OR PrintAgentLeases.ExpiresAt <= $now;
+            """;
+        command.Parameters.AddWithValue("$ownerId", ownerId);
+        command.Parameters.AddWithValue("$expiresAt", now.Add(duration).ToString("O"));
+        command.Parameters.AddWithValue("$now", now.ToString("O"));
+        return await command.ExecuteNonQueryAsync() == 1;
+    }
+
+    public async Task ReleaseAgentLeaseAsync(string ownerId)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM PrintAgentLeases WHERE Id = 1 AND OwnerId = $ownerId;";
+        command.Parameters.AddWithValue("$ownerId", ownerId);
         await command.ExecuteNonQueryAsync();
     }
 
@@ -390,7 +475,8 @@ public class PrinterRegistryService
         Attempts = reader.GetInt32(8),
         LastError = reader.IsDBNull(9) ? null : reader.GetString(9),
         CreatedAt = DateTime.Parse(reader.GetString(10)),
-        UpdatedAt = DateTime.Parse(reader.GetString(11))
+        UpdatedAt = DateTime.Parse(reader.GetString(11)),
+        RequiresPrinterAttention = !reader.IsDBNull(12) && reader.GetInt32(12) == 1
     };
 
     private void EnsureDatabase()
@@ -430,6 +516,12 @@ public class PrinterRegistryService
                 ON PrintJobs(Status, CreatedAt);
             CREATE INDEX IF NOT EXISTS IX_PrintJobs_PrintOrderId
                 ON PrintJobs(PrintOrderId);
+
+            CREATE TABLE IF NOT EXISTS PrintAgentLeases (
+                Id INTEGER PRIMARY KEY CHECK (Id = 1),
+                OwnerId TEXT NOT NULL,
+                ExpiresAt TEXT NOT NULL
+            );
             """;
         command.ExecuteNonQuery();
     }

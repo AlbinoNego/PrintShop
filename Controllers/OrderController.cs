@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Net.Http.Headers;
 using Newtonsoft.Json;
 using PrintShop.Models;
 using PrintShop.Services;
+using System.Net.Mail;
 
 namespace PrintShop.Controllers;
 
@@ -10,7 +12,7 @@ public class OrderController : Controller
 {
     private readonly OrderQueueService _queue;
     private readonly PricingService _pricing;
-    private readonly PixService _pix;
+    private readonly MercadoPagoPixService _mercadoPagoPix;
     private readonly PageCountService _pageCounter;
     private readonly FileStorageService _fileStorage;
     private readonly PrinterRegistryService _printJobs;
@@ -20,12 +22,12 @@ public class OrderController : Controller
     private const string CustomerOrderIdsSessionKey = "CustomerOrderIds";
 
     public OrderController(OrderQueueService queue, PricingService pricing,
-        PixService pix, PageCountService pageCounter,
+        MercadoPagoPixService mercadoPagoPix, PageCountService pageCounter,
         FileStorageService fileStorage, PrinterRegistryService printJobs)
     {
         _queue = queue;
         _pricing = pricing;
-        _pix = pix;
+        _mercadoPagoPix = mercadoPagoPix;
         _pageCounter = pageCounter;
         _fileStorage = fileStorage;
         _printJobs = printJobs;
@@ -79,6 +81,24 @@ public class OrderController : Controller
             return RedirectToAction("MyOrders");
         }
 
+        // A edicao apaga a cobranca PIX do pedido. Se ela continuasse valida no Mercado Pago,
+        // um pagamento feito depois seria rejeitado pelo webhook e o pedido nunca ficaria pago.
+        if (existingOrder != null && !string.IsNullOrWhiteSpace(existingOrder.MercadoPagoPaymentId))
+        {
+            var cancelResult = await _mercadoPagoPix.CancelPixOrderAsync(existingOrder.MercadoPagoPaymentId);
+            if (cancelResult == PixCancelResult.AlreadyPaid)
+            {
+                TempData["Error"] = "O PIX deste pedido ja foi pago. Aguarde a confirmacao; o pedido nao pode mais ser alterado.";
+                return RedirectToAction("Success", new { id = existingOrder.Id });
+            }
+
+            if (cancelResult == PixCancelResult.Failed)
+            {
+                TempData["Error"] = "Nao foi possivel cancelar o PIX gerado antes. Tente editar novamente em instantes.";
+                return RedirectToNew(existingOrder.Id);
+            }
+        }
+
         if ((files == null || files.Count == 0) && (existingOrder == null || existingOrder.Files.Count == 0))
         {
             TempData["Error"] = "Envie pelo menos um arquivo.";
@@ -119,6 +139,11 @@ public class OrderController : Controller
         order.DeliveryComplement = deliveryComplement ?? "";
         order.DeliveryFee = 0m;
         order.PixCode = null;
+        order.PixQrCodeBase64 = null;
+        order.PixExpiresAt = null;
+        order.MercadoPagoPaymentId = null;
+        order.MercadoPagoStatus = null;
+        order.MercadoPagoIdempotencyKey = null;
         order.PaymentConfirmed = false;
         order.Status = OrderStatus.Draft;
 
@@ -137,16 +162,36 @@ public class OrderController : Controller
 
         ApplyExistingFileCopies(order, existingFileIds, existingFileCopies);
 
-        var uploadedFileIndex = 0;
+        // fileCopies vem na mesma ordem dos arquivos enviados, inclusive os rejeitados;
+        // o indice precisa avancar para todos, senao as copias deslizam para o arquivo errado.
+        var uploadedFileIndex = -1;
+        var rejectedFiles = new List<string>();
         foreach (var file in files ?? new List<IFormFile>())
         {
+            uploadedFileIndex++;
             var ext = Path.GetExtension(file.FileName).ToLower();
-            if (!AllowedExtensions.Contains(ext)) continue;
-            if (file.Length > 50 * 1024 * 1024) continue; // max 50MB
+            if (!AllowedExtensions.Contains(ext) ||
+                file.Length > 50 * 1024 * 1024 || // max 50MB
+                !await HasExpectedSignatureAsync(file, ext))
+            {
+                rejectedFiles.Add(file.FileName);
+                continue;
+            }
 
             var storedName = await _fileStorage.SaveAsync(file, ext);
             var filePath = _fileStorage.GetPath(storedName);
-            var pageCount = _pageCounter.CountPages(filePath, file.FileName);
+            int pageCount;
+            try
+            {
+                pageCount = _pageCounter.CountPages(filePath, file.FileName);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or System.Xml.XmlException)
+            {
+                // Arquivo corrompido: antes virava erro 500 e deixava o arquivo orfao no disco.
+                _fileStorage.Delete(storedName);
+                rejectedFiles.Add(file.FileName);
+                continue;
+            }
 
             order.Files.Add(new UploadedFile
             {
@@ -157,13 +202,17 @@ public class OrderController : Controller
                 PageCount = pageCount,
                 Copies = GetCopyAt(fileCopies, uploadedFileIndex, order.Copies)
             });
-            uploadedFileIndex++;
         }
 
         if (order.Files.Count == 0)
         {
             TempData["Error"] = "Nenhum arquivo válido enviado.";
             return RedirectToNew(existingOrder?.Id);
+        }
+
+        if (rejectedFiles.Count > 0)
+        {
+            TempData["Error"] = $"Arquivos ignorados (formato invalido, corrompido ou acima de 50MB): {string.Join(", ", rejectedFiles)}";
         }
 
         order.TotalPrice = _pricing.Calculate(order);
@@ -207,6 +256,7 @@ public class OrderController : Controller
 
     // POST /Order/FindOrder - recupera pedido por codigo
     [HttpPost]
+    [EnableRateLimiting("order-lookup")]
     public async Task<IActionResult> FindOrder(string id)
     {
         var normalizedId = NormalizeOrderId(id);
@@ -238,6 +288,7 @@ public class OrderController : Controller
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
+        if (!CanCustomerView(order)) return RedirectToLookup();
 
         var breakdown = _pricing.GetBreakdown(order);
         ViewBag.Breakdown = breakdown;
@@ -251,10 +302,8 @@ public class OrderController : Controller
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
 
-        if (!IsAdminLoggedIn() && !GetCustomerOrderIds().Contains(order.Id))
-        {
-            return Forbid();
-        }
+        // Forbid() exige um esquema de autenticacao, que o site nao usa; daria erro 500.
+        if (!CanCustomerView(order)) return NotFound();
 
         var file = order.Files.FirstOrDefault(item => item.Id == fileId);
         if (file == null) return NotFound();
@@ -262,28 +311,44 @@ public class OrderController : Controller
         var path = _fileStorage.GetPath(file.StoredName);
         if (!System.IO.File.Exists(path)) return NotFound();
 
-        Response.Headers.ContentDisposition = $"inline; filename=\"{file.OriginalName}\"";
-        return PhysicalFile(path, string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+        // O tipo vem da extensao, nunca do Content-Type enviado pelo cliente: um "pdf" com
+        // text/html seria renderizado no dominio do site. So PDF abre no navegador.
+        var ext = Path.GetExtension(file.StoredName).ToLowerInvariant();
+        var contentType = PreviewContentTypes.GetValueOrDefault(ext, "application/octet-stream");
+        var disposition = new ContentDispositionHeaderValue(ext == ".pdf" ? "inline" : "attachment");
+        disposition.SetHttpFileName(file.OriginalName);
+        Response.Headers.ContentDisposition = disposition.ToString();
+        // Arquivo do cliente: sem isso o navegador reaproveita a copia em cache mesmo sem sessao.
+        Response.Headers.CacheControl = "private, no-store";
+        return PhysicalFile(path, contentType);
     }
+
+    private static readonly Dictionary<string, string> PreviewContentTypes = new()
+    {
+        [".pdf"] = "application/pdf",
+        [".doc"] = "application/msword",
+        [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        [".ppt"] = "application/vnd.ms-powerpoint",
+        [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".png"] = "image/png"
+    };
 
     // GET /Order/Payment/{id}
     public async Task<IActionResult> Payment(string id)
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
+        if (!CanCustomerView(order)) return RedirectToLookup();
 
         if ((order.Status != OrderStatus.Draft && order.Status != OrderStatus.PendingPayment) || order.PaymentConfirmed)
         {
             return RedirectToAction("Success", new { id });
         }
 
-        if (order.FulfillmentMethod == FulfillmentMethod.Delivery)
+        if (HasUsablePixPayment(order))
         {
-            order.PaymentMethod = PaymentMethod.Pix;
-            order.PixCode = _pix.GeneratePixCode(order.TotalPrice, order.Id);
-            order.Status = OrderStatus.PendingPayment;
-            await _queue.UpdateAsync(order);
-
             return RedirectToAction("PixPayment", new { id });
         }
 
@@ -292,17 +357,27 @@ public class OrderController : Controller
 
     // POST /Order/ConfirmPayment
     [HttpPost]
-    public async Task<IActionResult> ConfirmPayment(string id, string paymentMethod)
+    public async Task<IActionResult> ConfirmPayment(
+        string id,
+        string paymentMethod,
+        string? payerEmail)
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
+        if (!CanCustomerView(order)) return RedirectToLookup();
 
         if ((order.Status != OrderStatus.Draft && order.Status != OrderStatus.PendingPayment) || order.PaymentConfirmed)
         {
             return RedirectToAction("Success", new { id });
         }
 
-        order.PaymentMethod = Enum.Parse<PaymentMethod>(paymentMethod);
+        if (!Enum.TryParse<PaymentMethod>(paymentMethod, out var parsedPaymentMethod))
+        {
+            TempData["Error"] = "Forma de pagamento inválida.";
+            return RedirectToAction("Payment", new { id });
+        }
+
+        order.PaymentMethod = parsedPaymentMethod;
 
         if (order.FulfillmentMethod == FulfillmentMethod.Delivery)
         {
@@ -311,9 +386,44 @@ public class OrderController : Controller
 
         if (order.PaymentMethod == PaymentMethod.Pix)
         {
-            order.PixCode = _pix.GeneratePixCode(order.TotalPrice, order.Id);
+            if (!TryNormalizePayer(payerEmail, out var email, out var error))
+            {
+                TempData["Error"] = error;
+                return RedirectToAction("Payment", new { id });
+            }
+
+            order.CustomerEmail = email;
             order.Status = OrderStatus.PendingPayment;
+            order.PaymentConfirmed = false;
+            order.MercadoPagoIdempotencyKey ??= Guid.NewGuid().ToString("D");
             await _queue.UpdateAsync(order);
+
+            if (HasUsablePixPayment(order))
+            {
+                return RedirectToAction("PixPayment", new { id });
+            }
+
+            ClearGeneratedPixPayment(order);
+            order.MercadoPagoIdempotencyKey = Guid.NewGuid().ToString("D");
+            await _queue.UpdateAsync(order);
+
+            try
+            {
+                var payment = await _mercadoPagoPix.CreatePixOrderAsync(order, email);
+                order.MercadoPagoPaymentId = payment.Id;
+                order.MercadoPagoStatus = payment.Status;
+                order.MercadoPagoIdempotencyKey = payment.IdempotencyKey;
+                order.PixCode = payment.PixCode;
+                order.PixQrCodeBase64 = payment.QrCodeBase64;
+                order.PixExpiresAt = payment.ExpiresAt;
+                await _queue.UpdateAsync(order);
+            }
+            catch (MercadoPagoPixException ex)
+            {
+                TempData["Error"] = ex.Message;
+                return RedirectToAction("Payment", new { id });
+            }
+
             return RedirectToAction("PixPayment", new { id });
         }
 
@@ -330,6 +440,7 @@ public class OrderController : Controller
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
+        if (!CanCustomerView(order)) return RedirectToLookup();
         if (order.Status == OrderStatus.Draft || string.IsNullOrWhiteSpace(order.PixCode))
         {
             return RedirectToAction("Payment", new { id });
@@ -343,6 +454,7 @@ public class OrderController : Controller
     {
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
+        if (!CanCustomerView(order)) return RedirectToLookup();
         return View(order);
     }
 
@@ -351,7 +463,7 @@ public class OrderController : Controller
     public async Task<IActionResult> Status(string id)
     {
         var order = await _queue.GetAsync(id);
-        if (order == null) return NotFound();
+        if (order == null || !CanCustomerView(order)) return NotFound();
         return Json(new { status = order.Status.ToString(), statusLabel = GetStatusLabel(order.Status) });
     }
 
@@ -401,8 +513,11 @@ public class OrderController : Controller
 
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
-        if (order.Status == OrderStatus.Cancelled || order.Status == OrderStatus.Ready)
+        // Autorizar so vale para pedido aguardando pagamento; antes um pedido entregue
+        // ou com falha voltava para a fila e era impresso de novo.
+        if (order.Status != OrderStatus.PendingPayment)
         {
+            TempData["Error"] = $"Pedido #{order.Id} nao esta aguardando pagamento.";
             return RedirectToAction("Queue");
         }
 
@@ -433,17 +548,6 @@ public class OrderController : Controller
         return RedirectToAction("Queue");
     }
 
-    // POST /Order/MarkReady
-    [HttpPost]
-    public async Task<IActionResult> MarkReady(string id)
-    {
-        if (!IsAdminLoggedIn()) return Unauthorized();
-
-        var order = await _queue.GetAsync(id);
-        if (order != null) { order.Status = OrderStatus.Ready; await _queue.UpdateAsync(order); }
-        return RedirectToAction("Queue");
-    }
-
     [HttpPost]
     public async Task<IActionResult> Reprint(string id)
     {
@@ -454,6 +558,16 @@ public class OrderController : Controller
         if (order.Status == OrderStatus.Cancelled)
         {
             TempData["Error"] = $"Pedido #{order.Id} esta cancelado.";
+            return RedirectToAction("Queue");
+        }
+        if (order.Status is OrderStatus.PaymentConfirmed or OrderStatus.Printing)
+        {
+            TempData["Error"] = $"Pedido #{order.Id} ja esta na fila de impressao.";
+            return RedirectToAction("Queue");
+        }
+        if (order.Status is not (OrderStatus.Ready or OrderStatus.Delivered or OrderStatus.PrintFailed))
+        {
+            TempData["Error"] = $"Pedido #{order.Id} ainda nao pode ser reimpresso.";
             return RedirectToAction("Queue");
         }
 
@@ -514,6 +628,15 @@ public class OrderController : Controller
         }
     }
 
+    private bool CanCustomerView(PrintOrder order) =>
+        IsAdminLoggedIn() || GetCustomerOrderIds().Contains(order.Id);
+
+    private IActionResult RedirectToLookup()
+    {
+        TempData["Error"] = "Informe o codigo do pedido para acompanha-lo.";
+        return RedirectToAction("MyOrders");
+    }
+
     private bool CanCustomerEdit(PrintOrder order) =>
         (order.Status == OrderStatus.Draft || order.Status == OrderStatus.PendingPayment) &&
         !order.PaymentConfirmed &&
@@ -547,6 +670,29 @@ public class OrderController : Controller
         }
     }
 
+    // Confere os primeiros bytes do arquivo, para que um HTML ou executavel renomeado
+    // para .pdf/.docx nao seja aceito so pela extensao.
+    private static async Task<bool> HasExpectedSignatureAsync(IFormFile file, string ext)
+    {
+        var header = new byte[8];
+        await using var stream = file.OpenReadStream();
+        var read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false);
+        return MatchesSignature(header.AsSpan(0, read), ext);
+    }
+
+    private static bool MatchesSignature(ReadOnlySpan<byte> bytes, string ext)
+    {
+        return ext switch
+        {
+            ".pdf" => bytes.StartsWith("%PDF-"u8),
+            ".docx" or ".pptx" => bytes.StartsWith("PK\u0003\u0004"u8),
+            ".doc" or ".ppt" => bytes.StartsWith(new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 }),
+            ".jpg" or ".jpeg" => bytes.StartsWith(new byte[] { 0xFF, 0xD8, 0xFF }),
+            ".png" => bytes.StartsWith(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+            _ => false
+        };
+    }
+
     private static int GetCopyAt(List<int>? copies, int index, int fallback) =>
         copies != null && index >= 0 && index < copies.Count
             ? NormalizeCopies(copies[index])
@@ -554,5 +700,56 @@ public class OrderController : Controller
 
     private static int NormalizeCopies(int copies) =>
         Math.Max(1, Math.Min(copies, 100));
+
+    private static bool HasUsablePixPayment(PrintOrder order)
+    {
+        if (string.IsNullOrWhiteSpace(order.MercadoPagoPaymentId) || string.IsNullOrWhiteSpace(order.PixCode))
+        {
+            return false;
+        }
+
+        if (order.PixExpiresAt.HasValue && order.PixExpiresAt.Value <= DateTime.Now)
+        {
+            return false;
+        }
+
+        return !string.Equals(order.MercadoPagoStatus, "cancelled", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(order.MercadoPagoStatus, "canceled", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(order.MercadoPagoStatus, "rejected", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(order.MercadoPagoStatus, "failed", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(order.MercadoPagoStatus, "expired", StringComparison.OrdinalIgnoreCase) &&
+               !string.Equals(order.MercadoPagoStatus, "refunded", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ClearGeneratedPixPayment(PrintOrder order)
+    {
+        order.PixCode = null;
+        order.PixQrCodeBase64 = null;
+        order.PixExpiresAt = null;
+        order.MercadoPagoPaymentId = null;
+        order.MercadoPagoStatus = null;
+    }
+
+    private static bool TryNormalizePayer(
+        string? payerEmail,
+        out string email,
+        out string error)
+    {
+        email = (payerEmail ?? "").Trim();
+        error = "";
+
+        try
+        {
+            var parsedEmail = new MailAddress(email);
+            if (!string.Equals(parsedEmail.Address, email, StringComparison.OrdinalIgnoreCase)) throw new FormatException();
+        }
+        catch (FormatException)
+        {
+            error = "Informe um e-mail válido para gerar o PIX.";
+            return false;
+        }
+
+        return true;
+    }
 
 }

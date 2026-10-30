@@ -21,11 +21,17 @@ public class PrintOrder
     public PaymentMethod PaymentMethod { get; set; }
     public decimal TotalPrice { get; set; }
     public string? PixCode { get; set; }
+    public string? PixQrCodeBase64 { get; set; }
+    public DateTime? PixExpiresAt { get; set; }
+    public string? MercadoPagoPaymentId { get; set; }
+    public string? MercadoPagoStatus { get; set; }
+    public string? MercadoPagoIdempotencyKey { get; set; }
     public bool PaymentConfirmed { get; set; } = false;
 
     // Contato
     public string CustomerName { get; set; } = "";
     public string CustomerPhone { get; set; } = "";
+    public string? CustomerEmail { get; set; }
 
     // Entrega
     public FulfillmentMethod FulfillmentMethod { get; set; } = FulfillmentMethod.Pickup;

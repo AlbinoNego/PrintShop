@@ -25,6 +25,7 @@ public class PrintJob
     public string? PrinterId { get; set; }
     public string? PrinterName { get; set; }
     public string? PrinterSystemName { get; set; }
+    public bool RequiresPrinterAttention { get; set; }
     public PrintJobStatus Status { get; set; } = PrintJobStatus.Pending;
     public int Attempts { get; set; }
     public string? LastError { get; set; }

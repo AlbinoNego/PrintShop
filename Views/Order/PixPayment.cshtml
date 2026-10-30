@@ -22,10 +22,15 @@
             <strong>R$ @Model.TotalPrice.ToString("F2")</strong>
         </div>
 
-        <!-- QR Code gerado via API Google Charts -->
         <div class="qr-container">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=@Uri.EscapeDataString(Model.PixCode ?? "")"
-                 alt="QR Code PIX" class="qr-image" />
+            @if (!string.IsNullOrWhiteSpace(Model.PixQrCodeBase64))
+            {
+                <img src="data:image/png;base64,@Model.PixQrCodeBase64" alt="QR Code PIX" class="qr-image" />
+            }
+            else
+            {
+                <p class="form-hint">QR Code indisponível para esta cobrança. Use o código copia e cola abaixo.</p>
+            }
         </div>
 
         <div class="pix-copy">
@@ -48,6 +53,11 @@
             <span>Aguardando confirmacao do pagamento...</span>
         </div>
 
+        @if (Model.PixExpiresAt.HasValue)
+        {
+            <p class="form-hint">Cobrança válida até @Model.PixExpiresAt.Value.ToString("dd/MM/yyyy HH:mm").</p>
+        }
+
         <a href="/Order/Success/@Model.Id" class="btn-ghost btn-full pix-follow-link">Acompanhar pedido</a>
     </div>
 
@@ -69,7 +79,7 @@ const orderId = '@Model.Id';
 const interval = setInterval(async () => {
     const res = await fetch(`/Order/Status/${orderId}`);
     const data = await res.json();
-    if (data.status === 'Printing' || data.status === 'Ready') {
+    if (data.status === 'PaymentConfirmed' || data.status === 'Printing' || data.status === 'Ready') {
         clearInterval(interval);
         document.getElementById('pixStatus').innerHTML = `
             <div class="status-dot confirmed"></div>
