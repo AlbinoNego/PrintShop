@@ -15,8 +15,8 @@ Este projeto ainda está em desenvolvimento e não deve ser usado em produção 
 - Envio de arquivos PDF, Word, PowerPoint, JPG e PNG.
 - Arquivos armazenados fora da pasta pública do site.
 - Banco SQLite para pedidos e configurações.
-- Contagem real de páginas dos arquivos.
-- Cálculo por página, tipo de papel, plastificação, entrega e cópias por arquivo.
+- Contagem real de páginas dos arquivos (PDF inclusive com objetos comprimidos; Word e PowerPoint antigos pelo Office instalado no servidor).
+- Cálculo por página, tipo de papel, entrega e cópias por arquivo; plastificação cobrada por folha (em frente e verso, duas páginas = uma folha).
 - Escolha entre preto e branco ou colorido.
 - Escolha entre frente simples ou frente e verso.
 - Escolha entre retrato e paisagem.
@@ -29,15 +29,15 @@ Este projeto ainda está em desenvolvimento e não deve ser usado em produção 
 - Busca de pedido pelo código.
 - Painel administrativo com login.
 - Filtros, busca e detalhes de pedidos no admin.
-- Autorização manual de pagamento pelo admin.
-- Reimpressão, cancelamento, marcação como pronto e entregue.
-- Relatórios administrativos.
+- Autorização manual de pagamento na loja pelo admin.
+- Reimpressão, cancelamento e marcação como entregue; o agente marca o pedido como pronto ao terminar.
+- Relatórios administrativos com filtro de período e exportação CSV.
 - Configuração de preços e impressoras pelo admin.
 - Fila persistente de impressão por arquivo.
 - Agente Windows separado para executar a impressão fora do IIS.
-- Webhook PIX genérico.
-- HTTPS, HSTS fora de desenvolvimento e cookies seguros.
-- Rate limiting global, para upload e para webhook.
+- PIX pelo Mercado Pago (Orders API) com webhook assinado.
+- HTTPS, HSTS fora de desenvolvimento, cookies seguros e cabeçalhos de segurança.
+- Rate limiting por IP: global, upload, login admin, busca de pedido e webhook.
 
 ---
 
@@ -92,29 +92,18 @@ No Visual Studio, abra o projeto pelo arquivo `.csproj`. Abrir somente a pasta p
 
 ## Configuração
 
-As configurações ficam em `appsettings.json`.
+`appsettings.json` e `appsettings.Local.json` **não são versionados**. Copie `appsettings.example.json` para `appsettings.json` e coloque usuário/senha do admin, credenciais do Mercado Pago e caminhos de impressão em `appsettings.Local.json` ou em variáveis de ambiente.
 
-O arquivo versionado usa valores genéricos:
+Principais chaves:
 
-```json
-{
-  "PrintShop": {
-    "MaxFileSizeMB": 50,
-    "PrintExecutables": {
-      "Pdf": "",
-      "Word": "",
-      "PowerPoint": "",
-      "Image": ""
-    },
-    "Admin": {
-      "Username": "configure-um-usuario",
-      "Password": "configure-uma-senha"
-    }
-  }
-}
+```text
+PrintShop:Admin:Username / PrintShop:Admin:Password   (usados só para criar o primeiro admin)
+PrintShop:PrintExecutables:Pdf|Word|PowerPoint|Image
+PrintShop:PrintProcessTimeoutSeconds                  (padrão 180)
+MercadoPago:AccessToken / MercadoPago:WebhookSecret / MercadoPago:PixExpirationMinutes
 ```
 
-Para ambiente real, não deixe chave PIX, senha de admin ou segredo de webhook diretamente no repositório. Use variáveis de ambiente, `appsettings.Local.json` fora do Git ou outro provedor seguro.
+Atenção: o `PrintShop.Agent` lê `appsettings.json`, `appsettings.Production.json` e variáveis de ambiente, mas não `appsettings.Local.json`.
 
 ---
 
@@ -186,6 +175,8 @@ Para testar o agente localmente, com o site publicado em `C:\Sites\PrintShop`:
 dotnet run --project .\PrintShop.Agent\PrintShop.Agent.csproj -- --site-root "C:\Sites\PrintShop"
 ```
 
+Cada processo de impressão tem tempo limite (`PrintShop:PrintProcessTimeoutSeconds`, padrão 180 s). Se o leitor de PDF não fechar sozinho (o Acrobat costuma ficar aberto), o trabalho é marcado como falha; o SumatraPDF é recomendado.
+
 O agente respeita a opção de impressão automática do painel administrativo. Ao concluir todos os arquivos de um pedido, ele o marca como pronto. Em caso de falha, o pedido fica como `Falha na impressão` para que o administrador possa reenviá-lo.
 
 Em `/Admin/Printers`, cadastre cada impressora com o nome instalado no Windows e suas capacidades. O agente escolhe automaticamente uma impressora ativa e não pausada que atenda ao pedido (cor, A3 e frente e verso), priorizando a que possui menos trabalhos abertos.
@@ -228,7 +219,7 @@ No admin é possível:
 
 O PIX é criado pela API do Mercado Pago. O cliente recebe o QR Code e o código copia-e-cola retornados pelo provedor; a impressão só entra na fila após um webhook confirmado.
 
-Crie `appsettings.Local.json` a partir de `appsettings.Local.example.json`. Esse arquivo é ignorado pelo Git. Para o Checkout Transparente via Orders, o Access Token de teste do Mercado Pago começa com `APP_USR-`:
+Coloque as credenciais em `appsettings.Local.json` (ignorado pelo Git) seguindo a seção `MercadoPago` de `appsettings.example.json`. Ao editar um pedido que já tem PIX gerado, o site cancela a cobrança anterior no Mercado Pago; se ela já tiver sido paga, a edição é bloqueada. Para o Checkout Transparente via Orders, o Access Token de teste do Mercado Pago começa com `APP_USR-`:
 
 ```json
 {
@@ -254,21 +245,20 @@ O endpoint valida a assinatura do Mercado Pago, consulta a order na API e confer
 
 Já existe:
 
-- HTTPS;
-- HSTS fora de desenvolvimento;
-- cookies seguros;
-- rate limiting;
-- upload fora do `wwwroot`;
-- painel admin com login;
-- `.gitignore` para dados locais e arquivos de clientes.
+- HTTPS, HSTS fora de desenvolvimento e cookies seguros;
+- cabeçalhos `nosniff`, `X-Frame-Options`, `Referrer-Policy` e CSP `frame-ancestors`;
+- rate limiting por IP;
+- senha admin com hash PBKDF2 e usuários no banco;
+- upload fora do `wwwroot`, validado pela assinatura do arquivo;
+- pré-visualização com tipo fixo pela extensão (só PDF abre no navegador);
+- páginas do pedido acessíveis só pela sessão que criou/buscou o pedido ou pelo admin;
+- `.gitignore` para configurações locais, dados e arquivos de clientes.
 
 Ainda precisa melhorar antes de produção:
 
-- senha admin com hash e usuários no banco;
-- troca de credenciais por variáveis de ambiente;
-- backup automático do SQLite;
-- limpeza automática de uploads antigos;
-- validação mais forte do tipo real dos arquivos;
+- backup automático do SQLite e modo WAL;
+- limpeza automática de rascunhos e uploads antigos;
+- token antiforgery nas ações administrativas;
 - auditoria de ações administrativas;
 - configuração definitiva de domínio e certificado.
 
@@ -305,11 +295,11 @@ Publicação:
 dotnet publish -c Release -o C:\Sites\PrintShop
 ```
 
-Git:
+Git (confira o `git status` antes; configurações locais e dados já ficam fora pelo `.gitignore`):
 
 ```powershell
 git status
-git add .
+git add -A
 git commit -m "mensagem"
 git push origin main
 ```

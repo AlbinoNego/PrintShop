@@ -131,7 +131,7 @@ static async Task ProcessJobAsync(
 
     if (order == null || file == null)
     {
-        const string reason = "Pedido ou arquivo nao encontrado para impressao.";
+        const string reason = "Pedido ou arquivo não encontrado para impressão.";
         await jobs.CompleteJobAsync(job.Id, success: false, reason);
         if (order != null)
         {
@@ -151,9 +151,9 @@ static async Task ProcessJobAsync(
 
     if (!success)
     {
-        const string reason = "A impressao nao foi concluida pelo Windows.";
+        const string reason = "A impressão não foi concluída pelo Windows (falha ou tempo esgotado).";
         await jobs.CompleteJobAsync(job.Id, success: false, reason);
-        await jobs.CancelOpenJobsAsync(order.Id, "Cancelado apos falha de outro arquivo.", job.Id);
+        await jobs.CancelOpenJobsAsync(order.Id, "Cancelado após falha de outro arquivo.", job.Id);
         order.Status = OrderStatus.PrintFailed;
         await queue.UpdateAsync(order);
         logger.LogError("Falha ao imprimir trabalho {JobId} do pedido {OrderId}", job.Id, order.Id);

@@ -1,18 +1,45 @@
 @model PrintShop.Models.AdminReportViewModel
 @{
-    ViewData["Title"] = "Relatorios";
+    ViewData["Title"] = "Relatórios";
     Layout = "~/Views/Shared/_Layout.cshtml";
+    var today = DateTime.Today;
+    var from = Model.From?.ToString("yyyy-MM-dd") ?? "";
+    var to = Model.To?.ToString("yyyy-MM-dd") ?? "";
+    string Period(DateTime start, DateTime end) => $"/Admin/Reports?from={start:yyyy-MM-dd}&to={end:yyyy-MM-dd}";
+    var periodLabel = Model.From.HasValue || Model.To.HasValue
+        ? $"{Model.From?.ToString("dd/MM/yyyy") ?? "início"} a {Model.To?.ToString("dd/MM/yyyy") ?? "hoje"}"
+        : "todo o período";
 }
 
 <div class="page-header">
-    <h1>Relatorios</h1>
-    <p>Resumo operacional dos pedidos registrados no sistema.</p>
+    <h1>Relatórios</h1>
+    <p>Resumo operacional dos pedidos de @periodLabel.</p>
+</div>
+
+<form action="/Admin/Reports" method="get" class="queue-filter report-filter">
+    <div class="field">
+        <label for="from">De</label>
+        <input type="date" name="from" id="from" class="text-input" value="@from" />
+    </div>
+    <div class="field">
+        <label for="to">Até</label>
+        <input type="date" name="to" id="to" class="text-input" value="@to" />
+    </div>
+    <button type="submit" class="btn-primary">Filtrar</button>
+    <a href="/Admin/ExportOrders?from=@from&to=@to" class="btn-ghost">Exportar CSV</a>
+</form>
+<div class="report-presets">
+    <a href="@Period(today, today)">Hoje</a>
+    <a href="@Period(today.AddDays(-6), today)">Últimos 7 dias</a>
+    <a href="@Period(new DateTime(today.Year, today.Month, 1), today)">Este mês</a>
+    <a href="@Period(new DateTime(today.Year, today.Month, 1).AddMonths(-1), new DateTime(today.Year, today.Month, 1).AddDays(-1))">Mês passado</a>
+    <a href="/Admin/Reports">Tudo</a>
 </div>
 
 <div class="queue-stats">
     <div class="stat report-primary-stat">
         <strong>R$ @Model.CompletedRevenue.ToString("F2")</strong>
-        <span>Faturamento concluido</span>
+        <span>Faturamento concluído</span>
     </div>
     <div class="stat">
         <strong>R$ @Model.TotalRegisteredRevenue.ToString("F2")</strong>
@@ -28,11 +55,11 @@
     </div>
     <div class="stat">
         <strong>@Model.PrintedPages</strong>
-        <span>Paginas para impressao</span>
+        <span>Páginas para impressão</span>
     </div>
     <div class="stat">
         <strong>@Model.TotalPages</strong>
-        <span>Paginas enviadas</span>
+        <span>Páginas enviadas</span>
     </div>
     <div class="stat">
         <strong>@Model.TotalFiles</strong>
@@ -67,7 +94,7 @@
     </div>
 
     <div class="review-card">
-        <h2>Tipo de impressao</h2>
+        <h2>Tipo de impressão</h2>
         @if (!Model.ColorBreakdown.Any())
         {
             <p class="muted">Sem dados.</p>
@@ -164,7 +191,7 @@
                     <th>Cliente</th>
                     <th>Telefone</th>
                     <th>Pedidos</th>
-                    <th>Paginas</th>
+                    <th>Páginas</th>
                     <th>Valor</th>
                 </tr>
             </thead>

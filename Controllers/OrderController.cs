@@ -45,7 +45,7 @@ public class OrderController : Controller
 
             if (!CanCustomerEdit(order))
             {
-                TempData["Error"] = "Este pedido nao pode mais ser editado.";
+                TempData["Error"] = "Este pedido não pode mais ser editado.";
                 return RedirectToAction("MyOrders");
             }
 
@@ -77,7 +77,7 @@ public class OrderController : Controller
 
         if (existingOrder != null && !CanCustomerEdit(existingOrder))
         {
-            TempData["Error"] = "Este pedido nao pode mais ser editado.";
+            TempData["Error"] = "Este pedido não pode mais ser editado.";
             return RedirectToAction("MyOrders");
         }
 
@@ -88,13 +88,13 @@ public class OrderController : Controller
             var cancelResult = await _mercadoPagoPix.CancelPixOrderAsync(existingOrder.MercadoPagoPaymentId);
             if (cancelResult == PixCancelResult.AlreadyPaid)
             {
-                TempData["Error"] = "O PIX deste pedido ja foi pago. Aguarde a confirmacao; o pedido nao pode mais ser alterado.";
+                TempData["Error"] = "O PIX deste pedido já foi pago. Aguarde a confirmação; o pedido não pode mais ser alterado.";
                 return RedirectToAction("Success", new { id = existingOrder.Id });
             }
 
             if (cancelResult == PixCancelResult.Failed)
             {
-                TempData["Error"] = "Nao foi possivel cancelar o PIX gerado antes. Tente editar novamente em instantes.";
+                TempData["Error"] = "Não foi possível cancelar o PIX gerado antes. Tente editar novamente em instantes.";
                 return RedirectToNew(existingOrder.Id);
             }
         }
@@ -153,7 +153,7 @@ public class OrderController : Controller
                 string.IsNullOrWhiteSpace(order.DeliveryNumber) ||
                 string.IsNullOrWhiteSpace(order.DeliveryNeighborhood))
             {
-                TempData["Error"] = "Informe endereco, numero e bairro para entrega.";
+                TempData["Error"] = "Informe endereço, número e bairro para entrega.";
                 return RedirectToNew(existingOrder?.Id);
             }
 
@@ -212,7 +212,7 @@ public class OrderController : Controller
 
         if (rejectedFiles.Count > 0)
         {
-            TempData["Error"] = $"Arquivos ignorados (formato invalido, corrompido ou acima de 50MB): {string.Join(", ", rejectedFiles)}";
+            TempData["Error"] = $"Arquivos ignorados (formato inválido, corrompido ou acima de 50MB): {string.Join(", ", rejectedFiles)}";
         }
 
         order.TotalPrice = _pricing.Calculate(order);
@@ -263,14 +263,14 @@ public class OrderController : Controller
 
         if (string.IsNullOrWhiteSpace(normalizedId))
         {
-            TempData["Error"] = "Informe o codigo do pedido.";
+            TempData["Error"] = "Informe o código do pedido.";
             return RedirectToAction("MyOrders");
         }
 
         var order = await _queue.GetAsync(normalizedId);
         if (order == null)
         {
-            TempData["Error"] = "Pedido nao encontrado.";
+            TempData["Error"] = "Pedido não encontrado.";
             return RedirectToAction("MyOrders");
         }
 
@@ -289,6 +289,17 @@ public class OrderController : Controller
         var order = await _queue.GetAsync(id);
         if (order == null) return NotFound();
         if (!CanCustomerView(order)) return RedirectToLookup();
+
+        // Rascunho ainda nao tem cobranca: recalcula para refletir regras ou precos atuais.
+        if (order.Status == OrderStatus.Draft)
+        {
+            var currentTotal = _pricing.Calculate(order);
+            if (currentTotal != order.TotalPrice)
+            {
+                order.TotalPrice = currentTotal;
+                await _queue.UpdateAsync(order);
+            }
+        }
 
         var breakdown = _pricing.GetBreakdown(order);
         ViewBag.Breakdown = breakdown;
@@ -475,9 +486,20 @@ public class OrderController : Controller
             return RedirectToAction("Login", "Admin", new { returnUrl = "/Order/Queue" });
         }
 
-        var orders = (await _queue.GetAllAsync())
+        var allOrders = (await _queue.GetAllAsync())
             .Where(order => order.Status != OrderStatus.Draft)
             .ToList();
+        var todayOrders = allOrders.Where(order => order.CreatedAt.Date == DateTime.Today).ToList();
+        // Os contadores olham todos os pedidos, nao so o resultado do filtro.
+        ViewBag.InQueueCount = allOrders.Count(order => order.Status is OrderStatus.PaymentConfirmed or OrderStatus.Printing);
+        ViewBag.ReadyCount = allOrders.Count(order => order.Status == OrderStatus.Ready);
+        ViewBag.TodayCount = todayOrders.Count;
+        ViewBag.TodayRevenue = todayOrders
+            .Where(order => order.PaymentConfirmed && order.Status != OrderStatus.Cancelled)
+            .Sum(order => order.TotalPrice);
+        ViewBag.QueueVersion = GetQueueVersion(allOrders);
+
+        var orders = allOrders;
         if (!string.IsNullOrWhiteSpace(status) &&
             Enum.TryParse<OrderStatus>(status, ignoreCase: true, out var parsedStatus))
         {
@@ -505,6 +527,22 @@ public class OrderController : Controller
         return View(orders);
     }
 
+    // GET /Order/QueueVersion - o painel consulta para avisar que ha mudancas sem recarregar a pagina
+    [HttpGet]
+    public async Task<IActionResult> QueueVersion()
+    {
+        if (!IsAdminLoggedIn()) return Unauthorized();
+
+        var orders = (await _queue.GetAllAsync())
+            .Where(order => order.Status != OrderStatus.Draft)
+            .ToList();
+        return Json(new { version = GetQueueVersion(orders) });
+    }
+
+    private static string GetQueueVersion(IEnumerable<PrintOrder> orders) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+            string.Join("|", orders.OrderBy(order => order.Id).Select(order => $"{order.Id}:{(int)order.Status}:{order.PaymentConfirmed}")))))[..16];
+
     // POST /Order/ApprovePayment
     [HttpPost]
     public async Task<IActionResult> ApprovePayment(string id)
@@ -517,7 +555,7 @@ public class OrderController : Controller
         // ou com falha voltava para a fila e era impresso de novo.
         if (order.Status != OrderStatus.PendingPayment)
         {
-            TempData["Error"] = $"Pedido #{order.Id} nao esta aguardando pagamento.";
+            TempData["Error"] = $"Pedido #{order.Id} não esta aguardando pagamento.";
             return RedirectToAction("Queue");
         }
 
@@ -526,7 +564,7 @@ public class OrderController : Controller
         await _queue.UpdateAsync(order);
         await _printJobs.EnqueueOrderAsync(order);
 
-        TempData["Success"] = $"Pedido #{order.Id} encaminhado para a fila de impressao.";
+        TempData["Success"] = $"Pedido #{order.Id} encaminhado para a fila de impressão.";
         return RedirectToAction("Queue");
     }
 
@@ -562,12 +600,12 @@ public class OrderController : Controller
         }
         if (order.Status is OrderStatus.PaymentConfirmed or OrderStatus.Printing)
         {
-            TempData["Error"] = $"Pedido #{order.Id} ja esta na fila de impressao.";
+            TempData["Error"] = $"Pedido #{order.Id} já esta na fila de impressão.";
             return RedirectToAction("Queue");
         }
         if (order.Status is not (OrderStatus.Ready or OrderStatus.Delivered or OrderStatus.PrintFailed))
         {
-            TempData["Error"] = $"Pedido #{order.Id} ainda nao pode ser reimpresso.";
+            TempData["Error"] = $"Pedido #{order.Id} ainda não pode ser reimpresso.";
             return RedirectToAction("Queue");
         }
 
@@ -575,7 +613,7 @@ public class OrderController : Controller
         await _queue.UpdateAsync(order);
         await _printJobs.EnqueueOrderAsync(order, forceNewJobs: true);
 
-        TempData["Success"] = $"Pedido #{order.Id} reenviado para a fila de impressao.";
+        TempData["Success"] = $"Pedido #{order.Id} reenviado para a fila de impressão.";
         return RedirectToAction("Queue");
     }
 
@@ -598,10 +636,10 @@ public class OrderController : Controller
     private static string GetStatusLabel(OrderStatus status) => status switch
     {
         OrderStatus.PendingPayment => "Aguardando pagamento",
-        OrderStatus.Draft => "Em revisao",
+        OrderStatus.Draft => "Em revisão",
         OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         OrderStatus.Printing => "Imprimindo...",
-        OrderStatus.PrintFailed => "Falha na impressao",
+        OrderStatus.PrintFailed => "Falha na impressão",
         OrderStatus.Ready => "Pronto para retirada!",
         OrderStatus.Delivered => "Entregue",
         OrderStatus.Cancelled => "Cancelado",
@@ -633,7 +671,7 @@ public class OrderController : Controller
 
     private IActionResult RedirectToLookup()
     {
-        TempData["Error"] = "Informe o codigo do pedido para acompanha-lo.";
+        TempData["Error"] = "Informe o código do pedido para acompanhá-lo.";
         return RedirectToAction("MyOrders");
     }
 

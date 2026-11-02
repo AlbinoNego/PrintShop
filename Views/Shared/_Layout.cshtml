@@ -15,14 +15,15 @@
             <span class="brand-icon">◈</span>
             <span>PrintShop</span>
         </a>
-        <div class="nav-links">
+        <button type="button" class="nav-toggle" id="navToggle" aria-controls="navLinks" aria-expanded="false">Menu</button>
+        <div class="nav-links" id="navLinks">
             <a href="/Order/New">Novo Pedido</a>
             <a href="/Order/MyOrders">Meus Pedidos</a>
             @if (Context.Session.GetString(PrintShop.Services.AdminAuthService.SessionKey) == "true")
             {
                 <a href="/Order/Queue" class="btn-queue">Admin</a>
-                <a href="/Admin/Reports">Relatorios</a>
-                <a href="/Admin/Settings">Configuracoes</a>
+                <a href="/Admin/Reports">Relatórios</a>
+                <a href="/Admin/Settings">Configurações</a>
                 <a href="/Admin/Printers">Impressoras</a>
                 <form action="/Admin/Logout" method="post" class="nav-form">
                     <button type="submit">Sair</button>

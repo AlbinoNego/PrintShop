@@ -46,16 +46,81 @@ public class AdminController : Controller
         !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : "/Order/Queue";
 
     [HttpGet]
-    public async Task<IActionResult> Reports()
+    public async Task<IActionResult> Reports(DateTime? from, DateTime? to)
     {
         if (!AdminAuthService.IsLoggedIn(HttpContext))
         {
             return RedirectToAction("Login", new { returnUrl = "/Admin/Reports" });
         }
 
-        var orders = await _queue.GetAllAsync();
+        var orders = FilterByPeriod(await _queue.GetAllAsync(), from, to);
         var report = BuildReport(orders);
+        report.From = from?.Date;
+        report.To = to?.Date;
         return View(report);
+    }
+
+    // GET /Admin/ExportOrders?from=2026-11-01&to=2026-11-30 - planilha CSV para abrir no Excel
+    [HttpGet]
+    public async Task<IActionResult> ExportOrders(DateTime? from, DateTime? to)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
+
+        var orders = FilterByPeriod(await _queue.GetAllAsync(), from, to)
+            .Where(order => order.Status != OrderStatus.Draft)
+            .OrderBy(order => order.CreatedAt);
+
+        var culture = CultureInfo.GetCultureInfo("pt-BR");
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine(string.Join(";", "Código", "Data", "Status", "Cliente", "Telefone", "Recebimento", "Pagamento",
+            "Pago", "Arquivos", "Páginas", "Páginas impressas", "Cor", "Papel", "Lados", "Plastificação", "Valor"));
+        foreach (var order in orders)
+        {
+            csv.AppendLine(string.Join(";", new[]
+            {
+                order.Id,
+                order.CreatedAt.ToString("dd/MM/yyyy HH:mm", culture),
+                GetStatusLabel(order.Status),
+                order.CustomerName,
+                order.CustomerPhone,
+                order.FulfillmentMethod == FulfillmentMethod.Delivery ? "Entrega" : "Retirada",
+                order.PaymentMethod == PaymentMethod.Pix ? "PIX" : "Na loja",
+                order.PaymentConfirmed ? "Sim" : "Não",
+                order.Files.Count.ToString(culture),
+                GetTotalPages(order).ToString(culture),
+                GetTotalPrintedPages(order).ToString(culture),
+                order.Color == PrintColor.Color ? "Colorido" : "Preto e branco",
+                order.PaperType.ToString().Replace("_", " "),
+                order.Sides == PrintSides.BothSides ? "Frente e verso" : "Apenas frente",
+                order.Laminate ? "Sim" : "Não",
+                order.TotalPrice.ToString("F2", culture)
+            }.Select(CsvCell)));
+        }
+
+        // BOM para o Excel reconhecer acentos em UTF-8.
+        var bytes = System.Text.Encoding.UTF8.GetPreamble()
+            .Concat(System.Text.Encoding.UTF8.GetBytes(csv.ToString()))
+            .ToArray();
+        var period = from.HasValue || to.HasValue
+            ? $"{from:yyyy-MM-dd}_a_{to:yyyy-MM-dd}"
+            : "todos";
+        return File(bytes, "text/csv; charset=utf-8", $"pedidos_{period}.csv");
+    }
+
+    private static List<PrintOrder> FilterByPeriod(List<PrintOrder> orders, DateTime? from, DateTime? to) =>
+        orders
+            .Where(order => !from.HasValue || order.CreatedAt.Date >= from.Value.Date)
+            .Where(order => !to.HasValue || order.CreatedAt.Date <= to.Value.Date)
+            .ToList();
+
+    // Nome de cliente vem do formulario publico: celulas iniciadas por = + - @ virariam formula no Excel.
+    private static string CsvCell(string value)
+    {
+        value ??= "";
+        if (value.Length > 0 && "=+-@\t\r".Contains(value[0])) value = "'" + value;
+        return value.IndexOfAny(new[] { ';', '"', '\n', '\r' }) >= 0
+            ? $"\"{value.Replace("\"", "\"\"")}\""
+            : value;
     }
 
     [HttpPost]
@@ -66,7 +131,7 @@ public class AdminController : Controller
         var user = _auth.Validate(username, password);
         if (user == null)
         {
-            TempData["Error"] = "Usuario ou senha invalidos.";
+            TempData["Error"] = "Usuário ou senha inválidos.";
             ViewBag.ReturnUrl = returnUrl;
             return View();
         }
@@ -195,7 +260,7 @@ public class AdminController : Controller
         };
 
         _settings.Save(settings);
-        TempData["Success"] = "Configuracoes salvas.";
+        TempData["Success"] = "Configurações salvas.";
         return RedirectToAction("Settings");
     }
 
@@ -288,11 +353,11 @@ public class AdminController : Controller
 
     private static string GetStatusLabel(OrderStatus status) => status switch
     {
-        OrderStatus.Draft => "Em revisao",
+        OrderStatus.Draft => "Em revisão",
         OrderStatus.PendingPayment => "Aguardando pagamento",
         OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         OrderStatus.Printing => "Imprimindo",
-        OrderStatus.PrintFailed => "Falha na impressao",
+        OrderStatus.PrintFailed => "Falha na impressão",
         OrderStatus.Ready => "Pronto",
         OrderStatus.Delivered => "Entregue",
         OrderStatus.Cancelled => "Cancelado",

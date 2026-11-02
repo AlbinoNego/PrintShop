@@ -1,6 +1,6 @@
 # Status do Projeto - PrintShop
 
-Última atualização: fila persistente e agente local de impressão em desenvolvimento.
+Última atualização: 02/11/2026 — correções de segurança, plastificação por folha, contagem de páginas pelo Office, painel e relatórios revisados.
 
 ## Objetivo
 
@@ -17,8 +17,8 @@ Funcionalidades implementadas:
 - Upload de PDF, Word, PowerPoint, JPG e PNG.
 - Arquivos salvos fora do `wwwroot`, em `App_Data/uploads`.
 - Pedidos e configurações salvos em SQLite, em `App_Data/printshop.db`.
-- Contagem real de páginas dos arquivos.
-- Cálculo de preço por página, cópias por arquivo, tipo de papel, plastificação e entrega.
+- Contagem real de páginas: PDF (inclusive object streams), DOC/DOCX e PPT pelo Office do servidor, PPTX pelo número de slides.
+- Cálculo de preço por página, cópias por arquivo, tipo de papel e entrega; plastificação por folha.
 - Orientação retrato/paisagem.
 - Pré-visualização disponível para PDF.
 - Edição de pedido antes do pagamento sem perder arquivos enviados.
@@ -30,9 +30,9 @@ Funcionalidades implementadas:
 - Retirada permite PIX ou pagamento na loja.
 - Pedido fica como rascunho durante a revisão e só entra no painel admin após confirmação da forma de pagamento.
 - Painel admin com login persistido em SQLite e senha protegida por hash PBKDF2.
-- Admin pode autorizar pagamento, barrar pedido, marcar como pronto, marcar como entregue e reimprimir.
-- Painel admin tem busca, filtro por status e detalhes do pedido.
-- Relatórios administrativos.
+- Admin pode autorizar pagamento na loja, barrar pedido, marcar como entregue e reimprimir; o agente marca como pronto.
+- Painel admin tem busca, filtro por status, detalhes com acesso aos arquivos, contadores do dia e aviso de pedidos novos.
+- Relatórios administrativos com filtro de período e exportação CSV.
 - Tela admin `/Admin/Settings` para preços, impressoras e pausa da impressão automática.
 - Impressão automática funcionando em testes para PDF, PPT/PPTX, DOC/DOCX e imagens.
 - Word/PowerPoint imprimem direto quando a orientação não muda; quando muda, o sistema gera PDF temporário para aplicar a orientação.
@@ -58,7 +58,7 @@ Branch principal:
 main
 ```
 
-O repositório já recebeu push da versão atual.
+`main` e `feature/print-agent-queue` estão no mesmo ponto. O histórico foi reescrito em 02/11/2026 para remover dados pessoais; clones antigos devem usar `git fetch` + `git reset --hard origin/main`.
 
 ## Rotas principais
 
@@ -173,8 +173,12 @@ Recomendado usar variáveis de ambiente ou outro provedor seguro de configuraç�
 
 Configurado em `Program.cs`.
 
-- Global: 120 requisições por minuto por IP.
+Todos os limites são por IP:
+
+- Global: 120 requisições por minuto.
 - Upload: 20 envios a cada 10 minutos.
+- Login admin: 10 tentativas a cada 15 minutos.
+- Busca de pedido por código: 15 a cada 10 minutos.
 - Webhook PIX: 60 chamadas por minuto.
 
 ## HTTPS
@@ -210,11 +214,13 @@ Observação:
 
 Prioridades futuras:
 
-1. Transformar o agente em serviço da conta Windows `PrintShopPrint` na VM.
-2. Auditoria de ações administrativas, backup e limpeza automática de arquivos.
-3. Validação mais forte do tipo real dos arquivos.
-4. Configuração real de domínio e certificado HTTPS em produção.
-5. Melhorias de entrega, relatórios por período e exportação.
+1. Trocar a senha de admin (a atual é curta).
+2. Trocar as referências SQLite com caminho absoluto no `.csproj` por `PackageReference`; ativar WAL e foreign keys.
+3. Fazer o agente ler `appsettings.Local.json`; criar a página `/Home/Error`.
+4. Transformar o agente em serviço da conta Windows `PrintShopPrint` na VM.
+5. Backup e limpeza automática de rascunhos/arquivos; auditoria de ações administrativas.
+6. Configuração real de domínio e certificado HTTPS em produção.
+7. Testes automatizados (preço, estados, webhook, fila).
 
 ## Comandos úteis
 
@@ -240,7 +246,7 @@ Git:
 
 ```powershell
 git status
-git add .
+git add -A
 git commit -m "mensagem"
 git push
 ```

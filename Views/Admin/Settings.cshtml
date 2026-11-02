@@ -1,14 +1,14 @@
 @model PrintShop.Models.AdminSettings
 @using System.Globalization
 @{
-    ViewData["Title"] = "Configuracoes";
+    ViewData["Title"] = "Configurações";
     Layout = "~/Views/Shared/_Layout.cshtml";
     var printers = ViewBag.Printers as List<string> ?? new List<string>();
 }
 
 <div class="page-header">
-    <h1>Configuracoes</h1>
-    <p>Controle impressoras, impressao automatica e precos usados nos novos pedidos.</p>
+    <h1>Configurações</h1>
+    <p>Controle impressoras, impressão automática e preços usados nos novos pedidos.</p>
 </div>
 
 <form action="/Admin/Settings" method="post" class="admin-settings-form">
@@ -18,7 +18,7 @@
                 <h3>Impressoras</h3>
                 <div class="fields-row">
                     <div class="field">
-                        <label for="DefaultPrinter">Impressora padrao</label>
+                        <label for="DefaultPrinter">Impressora padrão</label>
                         <input class="text-input" list="printers" name="DefaultPrinter" id="DefaultPrinter" value="@Model.DefaultPrinter" />
                     </div>
                     <div class="field">
@@ -44,7 +44,7 @@
                     <div class="field checkbox-field">
                         <label>
                             <input type="checkbox" name="AutomaticPrintingEnabled" value="true" @(Model.AutomaticPrintingEnabled ? "checked" : "") />
-                            Impressao automatica ativada
+                            Impressão automática ativada
                         </label>
                         <input type="hidden" name="AutomaticPrintingEnabled" value="false" />
                     </div>
@@ -59,14 +59,14 @@
             </div>
 
             <div class="review-card">
-                <h3>Precos</h3>
+                <h3>Preços</h3>
                 <div class="fields-row">
                     <div class="field">
-                        <label for="BlackAndWhitePrice">Preto e branco por pagina</label>
+                        <label for="BlackAndWhitePrice">Preto e branco por página</label>
                         <input class="text-input" type="number" step="0.01" min="0" name="BlackAndWhitePrice" id="BlackAndWhitePrice" value="@Model.BlackAndWhitePrice.ToString("0.00", CultureInfo.InvariantCulture)" />
                     </div>
                     <div class="field">
-                        <label for="ColorPrice">Colorido por pagina</label>
+                        <label for="ColorPrice">Colorido por página</label>
                         <input class="text-input" type="number" step="0.01" min="0" name="ColorPrice" id="ColorPrice" value="@Model.ColorPrice.ToString("0.00", CultureInfo.InvariantCulture)" />
                     </div>
                 </div>
@@ -86,7 +86,7 @@
                         <input class="text-input" type="number" step="0.01" min="0" name="GlossyExtra" id="GlossyExtra" value="@Model.GlossyExtra.ToString("0.00", CultureInfo.InvariantCulture)" />
                     </div>
                     <div class="field">
-                        <label for="LaminatePrice">Plastificacao por folha</label>
+                        <label for="LaminatePrice">Plastificação por folha</label>
                         <input class="text-input" type="number" step="0.01" min="0" name="LaminatePrice" id="LaminatePrice" value="@Model.LaminatePrice.ToString("0.00", CultureInfo.InvariantCulture)" />
                     </div>
                 </div>
@@ -101,8 +101,8 @@
 
         <div class="price-sidebar">
             <div class="price-card">
-                <h3>Acoes</h3>
-                <button type="submit" class="btn-primary btn-full">Salvar configuracoes</button>
+                <h3>Ações</h3>
+                <button type="submit" class="btn-primary btn-full">Salvar configurações</button>
                 <a href="/Order/Queue" class="btn-ghost btn-full">Voltar ao painel</a>
             </div>
         </div>

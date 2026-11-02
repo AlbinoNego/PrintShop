@@ -22,7 +22,7 @@ public class PricingService
         decimal printTotal = pricePerPage * totalPrintedPages;
 
         decimal laminateTotal = order.Laminate
-            ? settings.LaminatePrice * totalPrintedPages
+            ? settings.LaminatePrice * GetTotalSheets(order)
             : 0m;
 
         decimal deliveryTotal = order.FulfillmentMethod == FulfillmentMethod.Delivery
@@ -43,10 +43,11 @@ public class PricingService
         {
             TotalPages = totalPages,
             TotalPrintedPages = totalPrintedPages,
+            TotalSheets = GetTotalSheets(order),
             PricePerPage = pricePerPage,
             SideMultiplier = 1.0m,
             PrintSubtotal = Math.Round(pricePerPage * totalPrintedPages, 2),
-            LaminateSubtotal = order.Laminate ? Math.Round(settings.LaminatePrice * totalPrintedPages, 2) : 0m,
+            LaminateSubtotal = order.Laminate ? Math.Round(settings.LaminatePrice * GetTotalSheets(order), 2) : 0m,
             DeliverySubtotal = order.FulfillmentMethod == FulfillmentMethod.Delivery ? order.DeliveryFee : 0m,
             Total = Calculate(order)
         };
@@ -69,12 +70,24 @@ public class PricingService
 
     private static int GetTotalPrintedPages(PrintOrder order) =>
         order.Files.Sum(file => file.PageCount * Math.Max(1, file.Copies));
+
+    // A plastificacao e cobrada por folha: em frente e verso duas paginas ocupam uma folha.
+    // Cada copia de cada arquivo e uma pilha separada, entao o arredondamento e por arquivo.
+    public static int GetTotalSheets(PrintOrder order) =>
+        order.Files.Sum(file =>
+        {
+            var sheetsPerCopy = order.Sides == PrintSides.BothSides
+                ? (file.PageCount + 1) / 2
+                : file.PageCount;
+            return sheetsPerCopy * Math.Max(1, file.Copies);
+        });
 }
 
 public class PriceBreakdown
 {
     public int TotalPages { get; set; }
     public int TotalPrintedPages { get; set; }
+    public int TotalSheets { get; set; }
     public decimal PricePerPage { get; set; }
     public decimal SideMultiplier { get; set; }
     public decimal PrintSubtotal { get; set; }

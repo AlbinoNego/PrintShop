@@ -6,12 +6,12 @@
 
 <div class="page-header">
     <h1>Meus Pedidos</h1>
-    <p>Acompanhe pedidos deste navegador ou busque pelo codigo do pedido.</p>
+    <p>Acompanhe pedidos deste navegador ou busque pelo código do pedido.</p>
 </div>
 
 <form action="/Order/FindOrder" method="post" class="lookup-card">
     <div class="field">
-        <label for="id">Codigo do pedido</label>
+        <label for="id">Código do pedido</label>
         <input type="text" name="id" id="id" class="text-input" placeholder="Ex: ABC12345" required />
     </div>
     <button type="submit" class="btn-primary">Buscar</button>
@@ -98,7 +98,7 @@
         PrintShop.Models.OrderStatus.PendingPayment => "Aguardando pagamento",
         PrintShop.Models.OrderStatus.PaymentConfirmed => "Pagamento confirmado",
         PrintShop.Models.OrderStatus.Printing => "Imprimindo",
-        PrintShop.Models.OrderStatus.PrintFailed => "Falha na impressao",
+        PrintShop.Models.OrderStatus.PrintFailed => "Falha na impressão",
         PrintShop.Models.OrderStatus.Ready => "Pronto",
         PrintShop.Models.OrderStatus.Delivered => "Entregue",
         PrintShop.Models.OrderStatus.Cancelled => "Cancelado",

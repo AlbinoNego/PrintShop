@@ -8,6 +8,16 @@ function formatBRL(value) {
 
 // Máscara de telefone
 document.addEventListener('DOMContentLoaded', () => {
+    // Menu recolhível no celular
+    const navToggle = document.getElementById('navToggle');
+    const navLinks = document.getElementById('navLinks');
+    if (navToggle && navLinks) {
+        navToggle.addEventListener('click', () => {
+            const open = navLinks.classList.toggle('open');
+            navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+
     const phoneInput = document.getElementById('customerPhone');
     if (phoneInput) {
         phoneInput.addEventListener('input', (e) => {

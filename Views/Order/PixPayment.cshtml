@@ -6,14 +6,14 @@
 
 <div class="page-header">
     <h1>Pagar com PIX</h1>
-    <p>Escaneie o QR Code ou copie o código abaixo. Guarde o codigo do pedido para acompanhar depois.</p>
+    <p>Escaneie o QR Code ou copie o código abaixo. Guarde o código do pedido para acompanhar depois.</p>
 </div>
 
 <div class="pix-layout">
 
     <div class="pix-card">
         <div class="pix-order-code">
-            <span>Codigo do pedido</span>
+            <span>Código do pedido</span>
             <strong>#@Model.Id</strong>
         </div>
 
@@ -50,7 +50,7 @@
 
         <div class="pix-status" id="pixStatus">
             <div class="status-dot pending"></div>
-            <span>Aguardando confirmacao do pagamento...</span>
+            <span>Aguardando confirmação do pagamento...</span>
         </div>
 
         @if (Model.PixExpiresAt.HasValue)

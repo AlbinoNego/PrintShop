@@ -67,7 +67,7 @@
                 @if (Model.FulfillmentMethod == PrintShop.Models.FulfillmentMethod.Delivery)
                 {
                     <div class="review-row">
-                        <span>Endereco</span>
+                        <span>Endereço</span>
                         <strong>@Model.DeliveryAddress, @Model.DeliveryNumber</strong>
                     </div>
                     <div class="review-row">
@@ -110,7 +110,7 @@
                 @if (Model.Laminate)
                 {
                     <div class="price-row">
-                        <span>Plastificação</span>
+                        <span>Plastificação (@breakdown.TotalSheets folha@(breakdown.TotalSheets == 1 ? "" : "s"))</span>
                         <span>R$ @breakdown.LaminateSubtotal.ToString("F2")</span>
                     </div>
                 }

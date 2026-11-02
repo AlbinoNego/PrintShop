@@ -2,6 +2,8 @@ namespace PrintShop.Models;
 
 public class AdminReportViewModel
 {
+    public DateTime? From { get; set; }
+    public DateTime? To { get; set; }
     public int TotalOrders { get; set; }
     public int PaidOrders { get; set; }
     public int PendingOrders { get; set; }

@@ -76,11 +76,11 @@ public class PixController : Controller
             if (payment.IsApproved)
             {
                 _logger.LogCritical(
-                    "PIX {PaymentId} aprovado para cobranca substituida do pedido {OrderId}. Conferir e estornar ou confirmar manualmente.",
+                    "PIX {PaymentId} aprovado para cobrança substituída do pedido {OrderId}. Conferir e estornar ou confirmar manualmente.",
                     paymentId, order.Id);
             }
 
-            return Ok(new { ignored = true, reason = "Cobranca substituida." });
+            return Ok(new { ignored = true, reason = "Cobrança substituída." });
         }
 
         if (!string.Equals(payment.CurrencyId, "BRL", StringComparison.OrdinalIgnoreCase) ||

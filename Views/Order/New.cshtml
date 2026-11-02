@@ -47,7 +47,7 @@
                                 <input type="hidden" name="existingFileIds" value="@file.Id" />
                                 <input type="number" name="existingFileCopies" value="@Math.Max(1, file.Copies)" min="1" max="100" class="file-copy-input" onclick="event.stopPropagation();" />
                             </div>
-                            <a class="file-preview" href="/Order/PreviewFile/@editOrder.Id?fileId=@file.Id" target="_blank" title="Pre-visualizar" onclick="event.stopPropagation();">👁</a>
+                            <a class="file-preview" href="/Order/PreviewFile/@editOrder.Id?fileId=@file.Id" target="_blank" title="Pré-visualizar" onclick="event.stopPropagation();">👁</a>
                             <button type="button" class="file-remove" onclick="event.stopPropagation(); removeExistingFile(@file.Id)">✕</button>
                         </div>
                     }
@@ -176,12 +176,12 @@
         <div class="delivery-fields" id="deliveryFields">
             <div class="fields-row">
                 <div class="field">
-                    <label for="deliveryAddress">Endereco</label>
+                    <label for="deliveryAddress">Endereço</label>
                     <input type="text" name="deliveryAddress" id="deliveryAddress"
                            placeholder="Rua, avenida ou travessa" value="@editOrder?.DeliveryAddress" class="text-input" />
                 </div>
                 <div class="field">
-                    <label for="deliveryNumber">Numero</label>
+                    <label for="deliveryNumber">Número</label>
                     <input type="text" name="deliveryNumber" id="deliveryNumber"
                            placeholder="123" value="@editOrder?.DeliveryNumber" class="text-input" />
                 </div>
@@ -195,7 +195,7 @@
                 <div class="field">
                     <label for="deliveryComplement">Complemento</label>
                     <input type="text" name="deliveryComplement" id="deliveryComplement"
-                           placeholder="Apartamento, referencia, bloco" value="@editOrder?.DeliveryComplement" class="text-input" />
+                           placeholder="Apartamento, referência, bloco" value="@editOrder?.DeliveryComplement" class="text-input" />
                 </div>
             </div>
         </div>
@@ -306,7 +306,7 @@ function renderFileList() {
                 <label>Cópias</label>
                 <input type="number" name="fileCopies" value="${selectedFileCopies[i] || 1}" min="1" max="100" class="file-copy-input" onclick="event.stopPropagation();" onchange="updateFileCopies(${i}, this.value)" />
             </div>
-            <button type="button" class="file-preview" title="Pre-visualizar" onclick="event.stopPropagation(); previewSelectedFile(${i})">👁</button>
+            <button type="button" class="file-preview" title="Pré-visualizar" onclick="event.stopPropagation(); previewSelectedFile(${i})">👁</button>
             <button type="button" class="file-remove" onclick="event.stopPropagation(); removeFile(${i})">✕</button>
         </div>
     `).join('');

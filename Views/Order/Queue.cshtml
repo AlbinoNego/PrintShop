@@ -10,32 +10,37 @@
 
 <div class="page-header">
     <h1>Painel de Pedidos</h1>
-    <p>Revise pagamentos, autorize impressoes e acompanhe a fila da papelaria.</p>
+    <p>Revise pagamentos, autorize impressões e acompanhe a fila da papelaria.</p>
 </div>
 
 <div class="queue-stats">
     <div class="stat">
-        <strong>@Model.Count(o => o.Status == PrintShop.Models.OrderStatus.Printing || o.Status == PrintShop.Models.OrderStatus.PaymentConfirmed)</strong>
+        <strong>@ViewBag.InQueueCount</strong>
         <span>Na fila</span>
     </div>
     <div class="stat">
-        <strong>@Model.Count(o => o.Status == PrintShop.Models.OrderStatus.Ready)</strong>
+        <strong>@ViewBag.ReadyCount</strong>
         <span>Prontos</span>
     </div>
     <div class="stat">
-        <strong>@Model.Count()</strong>
-        <span>Total hoje</span>
+        <strong>@ViewBag.TodayCount</strong>
+        <span>Pedidos hoje</span>
     </div>
     <div class="stat">
-        <strong>R$ @Model.Where(o => o.PaymentConfirmed).Sum(o => o.TotalPrice).ToString("F2")</strong>
-        <span>Faturamento</span>
+        <strong>R$ @(((decimal)ViewBag.TodayRevenue).ToString("F2"))</strong>
+        <span>Faturamento hoje</span>
     </div>
+</div>
+
+<div class="queue-update" id="queueUpdate" hidden>
+    <span>Há pedidos novos ou alterados.</span>
+    <button type="button" class="btn-primary" onclick="location.reload()">Atualizar</button>
 </div>
 
 <form action="/Order/Queue" method="get" class="queue-filter">
     <div class="field">
         <label for="search">Buscar</label>
-        <input type="text" name="search" id="search" class="text-input" value="@search" placeholder="Codigo, cliente, telefone ou arquivo" />
+        <input type="text" name="search" id="search" class="text-input" value="@search" placeholder="Código, cliente, telefone ou arquivo" />
     </div>
     <div class="field">
         <label for="status">Status</label>
@@ -70,7 +75,7 @@
                 }
             </div>
             <div>
-                <strong>Impressao</strong>
+                <strong>Impressão</strong>
                 <span>@(selectedOrder.Color == PrintColor.Color ? "Colorido" : "Preto e branco") · @selectedOrder.Files.Sum(file => file.PageCount * Math.Max(1, file.Copies)) pág. impr.</span>
                 <small>@selectedOrder.PaperType.ToString().Replace("_", " ") · @(selectedOrder.Sides == PrintSides.BothSides ? "Frente e verso" : "Apenas frente") · @(selectedOrder.Orientation == PrintOrientation.Landscape ? "Paisagem" : "Retrato")</small>
             </div>
@@ -83,7 +88,11 @@
         <div class="order-detail-files">
             @foreach (var file in selectedOrder.Files)
             {
-                <span class="file-tag">@file.OriginalName (@file.PageCount pág. · @Math.Max(1, file.Copies)x)</span>
+                var isPdf = file.StoredName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+                <a class="file-tag file-link" href="/Order/PreviewFile/@selectedOrder.Id?fileId=@file.Id" target="_blank" rel="noopener"
+                   title="@(isPdf ? "Abrir PDF" : "Baixar arquivo")">
+                    @(isPdf ? "👁" : "⬇") @file.OriginalName (@file.PageCount pág. · @Math.Max(1, file.Copies)x)
+                </a>
             }
         </div>
     </div>
@@ -181,18 +190,30 @@
 
 @section Scripts {
 <script>
-// Auto-refresh a cada 15 segundos
-setTimeout(() => location.reload(), 15000);
+// Em vez de recarregar a pagina toda (perdendo rolagem e detalhes), consulta se algo mudou
+// e mostra um aviso para o atendente atualizar quando quiser.
+const queueVersion = '@ViewBag.QueueVersion';
+setInterval(async () => {
+    try {
+        const res = await fetch('/Order/QueueVersion', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.version !== queueVersion) {
+            document.getElementById('queueUpdate').hidden = false;
+            document.title = '(novo) ' + document.title.replace(/^\(novo\) /, '');
+        }
+    } catch { /* sem conexão: tenta de novo no próximo ciclo */ }
+}, 15000);
 </script>
 }
 
 @functions {
     string GetStatusLabel(PrintShop.Models.OrderStatus status) => status switch {
-        PrintShop.Models.OrderStatus.Draft => "Em revisao",
+        PrintShop.Models.OrderStatus.Draft => "Em revisão",
         PrintShop.Models.OrderStatus.PendingPayment => "⏳ Aguardando pag.",
         PrintShop.Models.OrderStatus.PaymentConfirmed => "💳 Pago",
         PrintShop.Models.OrderStatus.Printing => "🖨️ Imprimindo",
-        PrintShop.Models.OrderStatus.PrintFailed => "⚠️ Falha na impressao",
+        PrintShop.Models.OrderStatus.PrintFailed => "⚠️ Falha na impressão",
         PrintShop.Models.OrderStatus.Ready => "✅ Pronto",
         PrintShop.Models.OrderStatus.Delivered => "📦 Entregue",
         PrintShop.Models.OrderStatus.Cancelled => "❌ Cancelado",
