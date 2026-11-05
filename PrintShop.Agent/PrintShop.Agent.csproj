@@ -9,5 +9,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PrintShop.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.0" />
   </ItemGroup>
 </Project>

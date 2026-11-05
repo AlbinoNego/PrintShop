@@ -8,6 +8,11 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<Compile Remove="PrintShop.Agent\**\*.cs" />
+		<!-- O agente e um projeto a parte; sem isto suas pastas bin entram aninhadas na saida. -->
+		<Content Remove="PrintShop.Agent\**" />
+		<None Remove="PrintShop.Agent\**" />
+		<!-- Configuracao local e segredos nunca vao para o pacote publicado. -->
+		<Content Update="appsettings.json;appsettings.Local.json;appsettings.example.json;launchSettings.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
 		<PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.0" />
 		<Reference Include="Microsoft.Data.Sqlite">
 			<HintPath>C:\Users\cryst\.nuget\packages\microsoft.data.sqlite.core\8.0.0\lib\net8.0\Microsoft.Data.Sqlite.dll</HintPath>

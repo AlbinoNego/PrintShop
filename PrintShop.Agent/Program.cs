@@ -1,5 +1,8 @@
+using System.ServiceProcess;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.EventLog;
 using PrintShop.Models;
 using PrintShop.Services;
 
@@ -30,6 +33,12 @@ using var loggerFactory = LoggerFactory.Create(logging =>
         options.TimestampFormat = "HH:mm:ss ";
     });
     logging.SetMinimumLevel(LogLevel.Information);
+
+    // Como servico nao ha console: os registros vao para o Visualizador de Eventos.
+    if (OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService())
+    {
+        logging.AddEventLog(new EventLogSettings { SourceName = "PrintShop.Agent" });
+    }
 });
 
 var paths = new AppStoragePathService(siteRoot);
@@ -47,77 +56,88 @@ var agentId = Guid.NewGuid().ToString("N");
 var leaseDuration = TimeSpan.FromMinutes(30);
 
 using var stopping = new CancellationTokenSource();
+if (OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService())
+{
+    ServiceBase.Run(new AgentWindowsService(stopping, RunAgentAsync));
+    return 0;
+}
+
 Console.CancelKeyPress += (_, eventArgs) =>
 {
     eventArgs.Cancel = true;
     stopping.Cancel();
 };
 
-logger.LogInformation("Agente de impressao iniciado. Pasta do site: {SiteRoot}", siteRoot);
+return await RunAgentAsync();
 
-if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
+async Task<int> RunAgentAsync()
 {
-    logger.LogCritical("Outro agente de impressao ja esta ativo para esta pasta do site.");
-    return 1;
-}
+    logger.LogInformation("Agente de impressao iniciado. Pasta do site: {SiteRoot}", siteRoot);
 
-try
-{
-    var staleOrderIds = await jobs.FailStaleProcessingJobsAsync(TimeSpan.FromMinutes(30));
-    foreach (var orderId in staleOrderIds.Distinct())
+    if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
     {
-        var staleOrder = await queue.GetAsync(orderId);
-        if (staleOrder == null || staleOrder.Status == OrderStatus.Cancelled) continue;
-
-        await jobs.CancelOpenJobsAsync(orderId, "Cancelado após interrupção anterior do agente de impressão.");
-        staleOrder.Status = OrderStatus.PrintFailed;
-        await queue.UpdateAsync(staleOrder);
+        logger.LogCritical("Outro agente de impressao ja esta ativo para esta pasta do site.");
+        return 1;
     }
 
-    if (staleOrderIds.Count > 0)
+    try
     {
-        logger.LogWarning("{Count} trabalho(s) interrompido(s) foram marcados como falha para revisão.", staleOrderIds.Count);
+        var staleOrderIds = await jobs.FailStaleProcessingJobsAsync(TimeSpan.FromMinutes(30));
+        foreach (var orderId in staleOrderIds.Distinct())
+        {
+            var staleOrder = await queue.GetAsync(orderId);
+            if (staleOrder == null || staleOrder.Status == OrderStatus.Cancelled) continue;
+
+            await jobs.CancelOpenJobsAsync(orderId, "Cancelado após interrupção anterior do agente de impressão.");
+            staleOrder.Status = OrderStatus.PrintFailed;
+            await queue.UpdateAsync(staleOrder);
+        }
+
+        if (staleOrderIds.Count > 0)
+        {
+            logger.LogWarning("{Count} trabalho(s) interrompido(s) foram marcados como falha para revisão.", staleOrderIds.Count);
+        }
+
+        while (!stopping.IsCancellationRequested)
+        {
+            if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
+            {
+                logger.LogCritical("O agente perdeu a concessão exclusiva de impressão e será encerrado.");
+                return 1;
+            }
+
+            if (!settings.Get().AutomaticPrintingEnabled)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(pollSeconds), stopping.Token);
+                continue;
+            }
+
+            var job = await jobs.TryClaimNextJobAsync();
+            if (job == null)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(pollSeconds), stopping.Token);
+                continue;
+            }
+
+            await ProcessJobAsync(job, queue, jobs, printer, logger);
+        }
+    }
+    catch (OperationCanceledException) when (stopping.IsCancellationRequested)
+    {
+        logger.LogInformation("Agente de impressao finalizado.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogCritical(ex, "O agente de impressao foi interrompido por um erro nao tratado.");
+        return 1;
+    }
+    finally
+    {
+        await jobs.ReleaseAgentLeaseAsync(agentId);
     }
 
-    while (!stopping.IsCancellationRequested)
-    {
-        if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
-        {
-            logger.LogCritical("O agente perdeu a concessão exclusiva de impressão e será encerrado.");
-            return 1;
-        }
-
-        if (!settings.Get().AutomaticPrintingEnabled)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(pollSeconds), stopping.Token);
-            continue;
-        }
-
-        var job = await jobs.TryClaimNextJobAsync();
-        if (job == null)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(pollSeconds), stopping.Token);
-            continue;
-        }
-
-        await ProcessJobAsync(job, queue, jobs, printer, logger);
-    }
+    return 0;
 }
-catch (OperationCanceledException) when (stopping.IsCancellationRequested)
-{
-    logger.LogInformation("Agente de impressao finalizado.");
-}
-catch (Exception ex)
-{
-    logger.LogCritical(ex, "O agente de impressao foi interrompido por um erro nao tratado.");
-    return 1;
-}
-finally
-{
-    await jobs.ReleaseAgentLeaseAsync(agentId);
-}
-
-return 0;
 
 static async Task ProcessJobAsync(
     PrintJob job,
@@ -181,4 +201,38 @@ static string? GetOption(string[] arguments, string name)
         string.Equals(argument, name, StringComparison.OrdinalIgnoreCase));
 
     return index >= 0 && index + 1 < arguments.Length ? arguments[index + 1] : null;
+}
+
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+internal sealed class AgentWindowsService : ServiceBase
+{
+    private readonly CancellationTokenSource _stopping;
+    private readonly Func<Task<int>> _run;
+    private Task? _running;
+
+    public AgentWindowsService(CancellationTokenSource stopping, Func<Task<int>> run)
+    {
+        _stopping = stopping;
+        _run = run;
+        ServiceName = "PrintShopAgent";
+    }
+
+    protected override void OnStart(string[] args)
+    {
+        _running = Task.Run(async () =>
+        {
+            var exitCode = await _run();
+            if (!_stopping.IsCancellationRequested)
+            {
+                // Parada inesperada: sair como falha para o Windows aplicar a recuperacao do servico.
+                Environment.Exit(exitCode == 0 ? 1 : exitCode);
+            }
+        });
+    }
+
+    protected override void OnStop()
+    {
+        _stopping.Cancel();
+        _running?.Wait(TimeSpan.FromSeconds(20));
+    }
 }
