@@ -28,6 +28,8 @@ public class PixController : Controller
 
     [HttpPost("MercadoPagoWebhook")]
     [EnableRateLimiting("pix-webhook")]
+    // Chamada servidor a servidor: a autenticidade vem da assinatura x-signature, nao de token de formulario.
+    [IgnoreAntiforgeryToken]
     public async Task<IActionResult> MercadoPagoWebhook()
     {
         var paymentId = Request.Query["data.id"].FirstOrDefault() ?? Request.Query["data_id"].FirstOrDefault();

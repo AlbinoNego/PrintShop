@@ -877,6 +877,9 @@ main { flex: 1; padding: 2.5rem; max-width: 1100px; margin: 0 auto; width: 100%;
     background: var(--surface);
 }
 .report-presets a:hover { border-color: var(--ink); color: var(--ink); }
+.audit-filter { grid-template-columns: 1fr auto auto; }
+.audit-details { max-width: 360px; font-size: .82rem; color: var(--ink-soft); word-break: break-word; }
+.error-icon { background: #fee2e2; color: #dc2626; font-weight: 700; }
 .file-link { text-decoration: none; color: inherit; }
 .file-link:hover { border-color: var(--ink); }
 

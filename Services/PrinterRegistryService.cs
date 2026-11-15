@@ -9,11 +9,7 @@ public class PrinterRegistryService
 
     public PrinterRegistryService(AppStoragePathService paths)
     {
-        _connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(paths.DataPath, "printshop.db"),
-            DefaultTimeout = 15
-        }.ToString();
+        _connectionString = PrintShopDatabase.ConnectionString(paths, 15);
 
         EnsureDatabase();
     }

@@ -10,11 +10,7 @@ public class AdminSettingsService
 
     public AdminSettingsService(AppStoragePathService paths)
     {
-        _connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(paths.DataPath, "printshop.db"),
-            DefaultTimeout = 5
-        }.ToString();
+        _connectionString = PrintShopDatabase.ConnectionString(paths, 5);
 
         EnsureDatabase();
     }

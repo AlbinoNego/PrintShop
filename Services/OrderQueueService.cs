@@ -9,11 +9,7 @@ public class OrderQueueService
 
     public OrderQueueService(AppStoragePathService paths)
     {
-        _connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(paths.DataPath, "printshop.db"),
-            DefaultTimeout = 5
-        }.ToString();
+        _connectionString = PrintShopDatabase.ConnectionString(paths, 5);
 
         SQLitePCL.Batteries_V2.Init();
         EnsureDatabase();
@@ -166,6 +162,17 @@ public class OrderQueueService
         }
 
         await transaction.CommitAsync();
+    }
+
+    // Remove o pedido; arquivos e trabalhos saem junto pelo ON DELETE CASCADE.
+    public async Task DeleteAsync(string id)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync();
+        var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM Orders WHERE Id = $id;";
+        command.Parameters.AddWithValue("$id", id);
+        await command.ExecuteNonQueryAsync();
     }
 
     public Task<List<PrintOrder>> GetAllAsync() =>

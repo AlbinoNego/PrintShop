@@ -1,0 +1,58 @@
+@model List<PrintShop.Services.AdminAuditEntry>
+@{
+    ViewData["Title"] = "Auditoria";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var search = ViewBag.Search as string ?? "";
+}
+
+<div class="page-header">
+    <h1>Auditoria</h1>
+    <p>Registro das ações feitas no painel: logins, autorizações, cancelamentos, configurações e impressoras.</p>
+</div>
+
+<form action="/Admin/Audit" method="get" class="queue-filter audit-filter">
+    <div class="field">
+        <label for="search">Buscar</label>
+        <input type="text" name="search" id="search" class="text-input" value="@search" placeholder="Usuário, ação ou código do pedido" />
+    </div>
+    <button type="submit" class="btn-primary">Filtrar</button>
+    <a href="/Admin/Audit" class="btn-ghost">Limpar</a>
+</form>
+
+<div class="queue-table-wrapper">
+    @if (!Model.Any())
+    {
+        <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>Nenhuma ação registrada@(string.IsNullOrWhiteSpace(search) ? "" : " para esta busca").</p>
+        </div>
+    }
+    else
+    {
+        <table class="queue-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Usuário</th>
+                    <th>Ação</th>
+                    <th>Alvo</th>
+                    <th>Detalhes</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model)
+                {
+                    <tr>
+                        <td><small>@entry.At.ToString("dd/MM/yyyy HH:mm:ss")</small></td>
+                        <td>@(string.IsNullOrWhiteSpace(entry.Username) ? "—" : entry.Username)</td>
+                        <td><strong>@entry.Action</strong></td>
+                        <td>@entry.Target</td>
+                        <td class="audit-details">@entry.Details</td>
+                        <td><small>@entry.IpAddress</small></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>

@@ -13,6 +13,7 @@
 </div>
 
 <form action="/Order/Upload" method="post" enctype="multipart/form-data" class="order-form" id="orderForm">
+    @Html.AntiForgeryToken()
     <input type="hidden" name="existingOrderId" value="@editOrder?.Id" />
     <input type="hidden" name="copies" id="copies" value="1" />
     <div id="removedFiles"></div>

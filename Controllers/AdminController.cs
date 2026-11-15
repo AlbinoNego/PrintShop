@@ -13,15 +13,18 @@ public class AdminController : Controller
     private readonly AdminSettingsService _settings;
     private readonly PrinterService _printer;
     private readonly PrinterRegistryService _printerRegistry;
+    private readonly AdminAuditService _audit;
 
     public AdminController(
         AdminAuthService auth,
         OrderQueueService queue,
         AdminSettingsService settings,
         PrinterService printer,
-        PrinterRegistryService printerRegistry)
+        PrinterRegistryService printerRegistry,
+        AdminAuditService audit)
     {
         _auth = auth;
+        _audit = audit;
         _queue = queue;
         _settings = settings;
         _printer = printer;
@@ -68,7 +71,10 @@ public class AdminController : Controller
 
         var orders = FilterByPeriod(await _queue.GetAllAsync(), from, to)
             .Where(order => order.Status != OrderStatus.Draft)
-            .OrderBy(order => order.CreatedAt);
+            .OrderBy(order => order.CreatedAt)
+            .ToList();
+        // A planilha leva nome e telefone dos clientes: fica registrado quem exportou.
+        _audit.Log(HttpContext, "Exportou pedidos", "", $"{from:dd/MM/yyyy} a {to:dd/MM/yyyy} ({orders.Count} pedidos)");
 
         var culture = CultureInfo.GetCultureInfo("pt-BR");
         var csv = new System.Text.StringBuilder();
@@ -131,19 +137,21 @@ public class AdminController : Controller
         var user = _auth.Validate(username, password);
         if (user == null)
         {
+            _audit.Log(username ?? "", "Login recusado", "", "", HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
             TempData["Error"] = "Usuário ou senha inválidos.";
             ViewBag.ReturnUrl = returnUrl;
             return View();
         }
 
-        HttpContext.Session.Clear();
-        HttpContext.Session.SetString(AdminAuthService.SessionKey, "true");
+        AdminAuthService.SignIn(HttpContext, user.Username);
+        _audit.Log(HttpContext, "Login");
         return LocalRedirect(returnUrl);
     }
 
     [HttpPost]
     public IActionResult Logout()
     {
+        if (AdminAuthService.IsLoggedIn(HttpContext)) _audit.Log(HttpContext, "Logout");
         HttpContext.Session.Clear();
         return RedirectToAction("Index", "Home");
     }
@@ -193,6 +201,8 @@ public class AdminController : Controller
                 SupportsA3 = supportsA3,
                 SupportsDuplex = supportsDuplex
             });
+            _audit.Log(HttpContext, "Cadastrou impressora", name ?? "",
+                $"Windows: {systemName}; cor={supportsColor}; A3={supportsA3}; frente e verso={supportsDuplex}");
             TempData["Success"] = "Impressora cadastrada.";
         }
         catch (ArgumentException ex)
@@ -209,6 +219,8 @@ public class AdminController : Controller
         if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
 
         _printerRegistry.TogglePause(id);
+        var printer = _printerRegistry.GetPrinters().FirstOrDefault(item => item.Id == id);
+        _audit.Log(HttpContext, printer?.IsPaused == true ? "Pausou impressora" : "Reativou impressora", printer?.Name ?? id);
         TempData["Success"] = "Status da impressora atualizado.";
         return RedirectToAction(nameof(Printers));
     }
@@ -225,6 +237,7 @@ public class AdminController : Controller
             return RedirectToAction(nameof(Printers));
         }
 
+        _audit.Log(HttpContext, "Reenviou trabalho de impressão", $"Pedido #{orderId}", $"Trabalho {id}");
         var order = await _queue.GetAsync(orderId);
         if (order != null && order.Status != OrderStatus.Cancelled)
         {
@@ -260,8 +273,32 @@ public class AdminController : Controller
         };
 
         _settings.Save(settings);
+        _audit.Log(HttpContext, "Alterou configurações", "", DescribeSettingsChanges(current, settings));
         TempData["Success"] = "Configurações salvas.";
         return RedirectToAction("Settings");
+    }
+
+    [HttpGet]
+    public IActionResult Audit(string? search)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext))
+        {
+            return RedirectToAction("Login", new { returnUrl = "/Admin/Audit" });
+        }
+
+        ViewBag.Search = search ?? "";
+        return View(_audit.GetRecent(300, search));
+    }
+
+    // Guarda o antes e depois de cada campo alterado, para precos e impressoras.
+    private static string DescribeSettingsChanges(AdminSettings before, AdminSettings after)
+    {
+        var changes = typeof(AdminSettings).GetProperties()
+            .Select(property => (property.Name, Before: property.GetValue(before)?.ToString() ?? "", After: property.GetValue(after)?.ToString() ?? ""))
+            .Where(item => item.Before != item.After)
+            .Select(item => $"{item.Name}: {item.Before} -> {item.After}")
+            .ToList();
+        return changes.Count == 0 ? "Sem alterações" : string.Join("; ", changes);
     }
 
     private static AdminReportViewModel BuildReport(List<PrintOrder> orders)

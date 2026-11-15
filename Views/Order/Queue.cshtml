@@ -155,10 +155,12 @@
                             @if (order.Status == PrintShop.Models.OrderStatus.PendingPayment)
                             {
                                 <form action="/Order/ApprovePayment" method="post">
+                                    @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@order.Id" />
                                     <button type="submit" class="btn-action">Autorizar</button>
                                 </form>
                                 <form action="/Order/Cancel" method="post">
+                                    @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@order.Id" />
                                     <button type="submit" class="btn-action btn-danger">Barrar</button>
                                 </form>
@@ -168,6 +170,7 @@
                                  order.Status == PrintShop.Models.OrderStatus.PrintFailed)
                             {
                                 <form action="/Order/Reprint" method="post">
+                                    @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@order.Id" />
                                     <button type="submit" class="btn-action">Reimprimir</button>
                                 </form>
@@ -175,6 +178,7 @@
                             @if (order.Status == PrintShop.Models.OrderStatus.Ready)
                             {
                                 <form action="/Order/MarkDelivered" method="post">
+                                    @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@order.Id" />
                                     <button type="submit" class="btn-action">Entregue</button>
                                 </form>

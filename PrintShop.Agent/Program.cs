@@ -22,6 +22,8 @@ var configuration = new ConfigurationBuilder()
     .SetBasePath(siteRoot)
     .AddJsonFile("appsettings.json", optional: false)
     .AddJsonFile("appsettings.Production.json", optional: true)
+    // Mesma ordem do site: configuracao local da maquina sobrepoe os arquivos versionados.
+    .AddJsonFile("appsettings.Local.json", optional: true)
     .AddEnvironmentVariables()
     .Build();
 
@@ -53,7 +55,10 @@ var printer = new PrinterService(
     settings);
 var logger = loggerFactory.CreateLogger("PrintShop.Agent");
 var agentId = Guid.NewGuid().ToString("N");
-var leaseDuration = TimeSpan.FromMinutes(30);
+// Concessao curta renovada em segundo plano: se o agente cair, outro assume em ~2 minutos
+// em vez de esperar meia hora.
+var leaseDuration = TimeSpan.FromMinutes(2);
+var leaseRenewInterval = TimeSpan.FromSeconds(30);
 
 using var stopping = new CancellationTokenSource();
 if (OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService())
@@ -80,9 +85,37 @@ async Task<int> RunAgentAsync()
         return 1;
     }
 
+    // Renova a concessao enquanto um trabalho longo imprime; o laco principal so renova entre trabalhos.
+    var leaseLost = false;
+    var renewal = Task.Run(async () =>
+    {
+        while (!stopping.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(leaseRenewInterval, stopping.Token);
+                if (!await jobs.TryAcquireAgentLeaseAsync(agentId, leaseDuration))
+                {
+                    leaseLost = true;
+                    stopping.Cancel();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Falha passageira (banco ocupado): tenta de novo no proximo ciclo.
+                logger.LogWarning(ex, "Nao foi possivel renovar a concessao do agente.");
+            }
+        }
+    });
+
     try
     {
-        var staleOrderIds = await jobs.FailStaleProcessingJobsAsync(TimeSpan.FromMinutes(30));
+        // Com a concessao exclusiva, qualquer trabalho ainda "imprimindo" pertence a um agente que caiu.
+        var staleOrderIds = await jobs.FailStaleProcessingJobsAsync(TimeSpan.Zero);
         foreach (var orderId in staleOrderIds.Distinct())
         {
             var staleOrder = await queue.GetAsync(orderId);
@@ -133,7 +166,15 @@ async Task<int> RunAgentAsync()
     }
     finally
     {
+        stopping.Cancel();
+        await renewal;
         await jobs.ReleaseAgentLeaseAsync(agentId);
+    }
+
+    if (leaseLost)
+    {
+        logger.LogCritical("O agente perdeu a concessão exclusiva de impressão e será encerrado.");
+        return 1;
     }
 
     return 0;
@@ -222,7 +263,7 @@ internal sealed class AgentWindowsService : ServiceBase
         _running = Task.Run(async () =>
         {
             var exitCode = await _run();
-            if (!_stopping.IsCancellationRequested)
+            if (exitCode != 0 || !_stopping.IsCancellationRequested)
             {
                 // Parada inesperada: sair como falha para o Windows aplicar a recuperacao do servico.
                 Environment.Exit(exitCode == 0 ? 1 : exitCode);

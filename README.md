@@ -103,7 +103,29 @@ PrintShop:PrintProcessTimeoutSeconds                  (padrão 180)
 MercadoPago:AccessToken / MercadoPago:WebhookSecret / MercadoPago:PixExpirationMinutes
 ```
 
-Atenção: o `PrintShop.Agent` lê `appsettings.json`, `appsettings.Production.json` e variáveis de ambiente, mas não `appsettings.Local.json`.
+O `PrintShop.Agent` lê os mesmos arquivos (`appsettings.json`, `appsettings.Production.json`, `appsettings.Local.json`) e variáveis de ambiente da pasta do site.
+
+### Manutenção automática
+
+O site faz, a cada 24 horas, backup do banco e das chaves em `App_Data/backups` (zip) e limpa rascunhos e arquivos antigos. Os uploads não entram no backup. Ajustes em `PrintShop:Maintenance`:
+
+```text
+DraftRetentionDays   7    rascunhos nunca pagos
+FileRetentionDays    90   arquivos de pedidos entregues/cancelados (0 = nunca apagar)
+BackupKeep           14   quantos backups manter
+BackupCopyPath            pasta extra (outro disco) para uma cópia de cada backup
+IntervalHours        24
+```
+
+### Auditoria
+
+Logins, autorizações, cancelamentos, reimpressões, entregas, exportações, impressoras e alterações de preço ficam registrados em `/Admin/Audit`, com usuário, data e IP.
+
+### Testes
+
+```powershell
+dotnet test PrintShop.Tests\PrintShop.Tests.csproj
+```
 
 ---
 

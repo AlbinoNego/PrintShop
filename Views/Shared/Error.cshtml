@@ -1,0 +1,24 @@
+@model int
+@{
+    var (title, message) = Model switch
+    {
+        404 => ("Página não encontrada", "O endereço acessado não existe ou o pedido não está disponível nesta sessão."),
+        400 => ("Não foi possível enviar", "O formulário expirou ou veio incompleto. Volte, recarregue a página e tente de novo."),
+        401 or 403 => ("Acesso não autorizado", "Entre novamente no painel para continuar."),
+        429 => ("Muitas tentativas", "Você fez muitas requisições em pouco tempo. Aguarde alguns minutos e tente de novo."),
+        >= 500 => ("Algo deu errado", "Não foi possível concluir esta ação agora. Tente novamente em instantes; se continuar, procure a papelaria."),
+        _ => ("Não foi possível continuar", "Esta ação não está disponível.")
+    };
+    ViewData["Title"] = title;
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="success-page error-page">
+    <div class="success-icon error-icon">!</div>
+    <h1>@title</h1>
+    <p class="success-subtitle">@message</p>
+    <div class="success-actions">
+        <a href="/" class="btn-primary">Ir para o início</a>
+        <a href="/Order/MyOrders" class="btn-ghost">Meus pedidos</a>
+    </div>
+</div>

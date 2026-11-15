@@ -16,6 +16,7 @@ public class OrderController : Controller
     private readonly PageCountService _pageCounter;
     private readonly FileStorageService _fileStorage;
     private readonly PrinterRegistryService _printJobs;
+    private readonly AdminAuditService _audit;
 
     private static readonly string[] AllowedExtensions =
         { ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".jpg", ".jpeg", ".png" };
@@ -23,8 +24,9 @@ public class OrderController : Controller
 
     public OrderController(OrderQueueService queue, PricingService pricing,
         MercadoPagoPixService mercadoPagoPix, PageCountService pageCounter,
-        FileStorageService fileStorage, PrinterRegistryService printJobs)
+        FileStorageService fileStorage, PrinterRegistryService printJobs, AdminAuditService audit)
     {
+        _audit = audit;
         _queue = queue;
         _pricing = pricing;
         _mercadoPagoPix = mercadoPagoPix;
@@ -563,6 +565,8 @@ public class OrderController : Controller
         order.Status = OrderStatus.PaymentConfirmed;
         await _queue.UpdateAsync(order);
         await _printJobs.EnqueueOrderAsync(order);
+        _audit.Log(HttpContext, "Autorizou pagamento", $"Pedido #{order.Id}",
+            $"{(order.PaymentMethod == PaymentMethod.Pix ? "PIX" : "Na loja")}, R$ {order.TotalPrice:F2}");
 
         TempData["Success"] = $"Pedido #{order.Id} encaminhado para a fila de impressão.";
         return RedirectToAction("Queue");
@@ -580,6 +584,8 @@ public class OrderController : Controller
             order.Status = OrderStatus.Cancelled;
             await _queue.UpdateAsync(order);
             await _printJobs.CancelOpenJobsAsync(order.Id, "Pedido barrado pelo administrador.");
+            _audit.Log(HttpContext, "Barrou pedido", $"Pedido #{order.Id}",
+                $"Pago: {(order.PaymentConfirmed ? "sim" : "não")}, R$ {order.TotalPrice:F2}");
             TempData["Success"] = $"Pedido #{order.Id} barrado.";
         }
 
@@ -612,6 +618,7 @@ public class OrderController : Controller
         order.Status = OrderStatus.PaymentConfirmed;
         await _queue.UpdateAsync(order);
         await _printJobs.EnqueueOrderAsync(order, forceNewJobs: true);
+        _audit.Log(HttpContext, "Reimprimiu pedido", $"Pedido #{order.Id}");
 
         TempData["Success"] = $"Pedido #{order.Id} reenviado para a fila de impressão.";
         return RedirectToAction("Queue");
@@ -627,6 +634,7 @@ public class OrderController : Controller
         {
             order.Status = OrderStatus.Delivered;
             await _queue.UpdateAsync(order);
+            _audit.Log(HttpContext, "Marcou como entregue", $"Pedido #{order.Id}");
             TempData["Success"] = $"Pedido #{order.Id} marcado como entregue.";
         }
 

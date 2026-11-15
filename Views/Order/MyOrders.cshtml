@@ -10,6 +10,7 @@
 </div>
 
 <form action="/Order/FindOrder" method="post" class="lookup-card">
+    @Html.AntiForgeryToken()
     <div class="field">
         <label for="id">Código do pedido</label>
         <input type="text" name="id" id="id" class="text-input" placeholder="Ex: ABC12345" required />

@@ -21,6 +21,7 @@
     <section class="review-card">
         <h3>Nova impressora</h3>
         <form action="/Admin/AddPrinter" method="post" class="printer-form">
+            @Html.AntiForgeryToken()
             <div class="field">
                 <label for="name">Nome no painel</label>
                 <input class="text-input" id="name" name="name" required placeholder="Ex.: Laser preto e branco" />
@@ -68,6 +69,7 @@
                             <small class="printer-load">@printer.PendingJobs na fila · @printer.ProcessingJobs imprimindo · @printer.FailedJobs falha(s)</small>
                         </div>
                         <form action="/Admin/TogglePrinterPause" method="post">
+                            @Html.AntiForgeryToken()
                             <input type="hidden" name="id" value="@printer.Id" />
                             <button type="submit" class="btn-action @(printer.IsPaused ? "" : "btn-danger")">
                                 @(printer.IsPaused ? "Retomar" : "Pausar")
@@ -141,6 +143,7 @@
                             @if (job.Status is PrintJobStatus.Failed or PrintJobStatus.Cancelled)
                             {
                                 <form action="/Admin/RetryPrintJob" method="post">
+                                    @Html.AntiForgeryToken()
                                     <input type="hidden" name="id" value="@job.Id" />
                                     <button type="submit" class="btn-action">Reenviar</button>
                                 </form>

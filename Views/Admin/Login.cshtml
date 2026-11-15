@@ -11,6 +11,7 @@
     </div>
 
     <form action="/Admin/Login" method="post" class="login-card">
+        @Html.AntiForgeryToken()
         <input type="hidden" name="returnUrl" value="@returnUrl" />
 
         <div class="field">

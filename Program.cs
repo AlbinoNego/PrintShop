@@ -13,8 +13,18 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-builder.Services.AddControllersWithViews()
+builder.Services.AddControllersWithViews(options =>
+    {
+        // Todo POST exige o token antiforgery dos formularios; o webhook do Mercado Pago e a excecao.
+        options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
+    })
     .AddNewtonsoftJson();
+
+builder.Services.AddAntiforgery(options =>
+{
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+});
 
 var storagePaths = new AppStoragePathService(builder.Environment);
 
@@ -85,6 +95,8 @@ builder.Services.AddSingleton<PageCountService>();
 builder.Services.AddSingleton<FileStorageService>();
 builder.Services.AddSingleton<AdminUserService>();
 builder.Services.AddSingleton<AdminAuthService>();
+builder.Services.AddSingleton<AdminAuditService>();
+builder.Services.AddHostedService<MaintenanceService>();
 
 var app = builder.Build();
 
@@ -114,6 +126,9 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
+
+// 404, 403 e 429 sem corpo viram uma pagina amigavel em vez de tela em branco.
+app.UseStatusCodePagesWithReExecute("/Home/Status/{0}");
 
 app.UseHttpsRedirection();
 app.UseStaticFiles(new StaticFileOptions

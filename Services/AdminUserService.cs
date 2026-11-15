@@ -13,11 +13,7 @@ public class AdminUserService
     public AdminUserService(AppStoragePathService paths, IConfiguration configuration)
     {
         _configuration = configuration;
-        _connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.Combine(paths.DataPath, "printshop.db"),
-            DefaultTimeout = 15
-        }.ToString();
+        _connectionString = PrintShopDatabase.ConnectionString(paths, 15);
 
         EnsureDatabase();
         CreateBootstrapUser();

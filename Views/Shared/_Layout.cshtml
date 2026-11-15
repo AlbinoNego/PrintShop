@@ -25,7 +25,9 @@
                 <a href="/Admin/Reports">Relatórios</a>
                 <a href="/Admin/Settings">Configurações</a>
                 <a href="/Admin/Printers">Impressoras</a>
+                <a href="/Admin/Audit">Auditoria</a>
                 <form action="/Admin/Logout" method="post" class="nav-form">
+                    @Html.AntiForgeryToken()
                     <button type="submit">Sair</button>
                 </form>
             }

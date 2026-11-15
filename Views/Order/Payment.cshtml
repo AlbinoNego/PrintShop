@@ -14,6 +14,7 @@
     <div class="payment-options">
 
         <form action="/Order/ConfirmPayment" method="post">
+            @Html.AntiForgeryToken()
             <input type="hidden" name="id" value="@Model.Id" />
 
             <label class="payment-card selected" id="pixCard">
