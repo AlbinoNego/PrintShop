@@ -68,13 +68,21 @@
                             </div>
                             <small class="printer-load">@printer.PendingJobs na fila · @printer.ProcessingJobs imprimindo · @printer.FailedJobs falha(s)</small>
                         </div>
-                        <form action="/Admin/TogglePrinterPause" method="post">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="id" value="@printer.Id" />
-                            <button type="submit" class="btn-action @(printer.IsPaused ? "" : "btn-danger")">
-                                @(printer.IsPaused ? "Retomar" : "Pausar")
-                            </button>
-                        </form>
+                        <div class="printer-actions">
+                            <form action="/Admin/TogglePrinterPause" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@printer.Id" />
+                                <button type="submit" class="btn-action @(printer.IsPaused ? "" : "btn-danger")">
+                                    @(printer.IsPaused ? "Retomar" : "Pausar")
+                                </button>
+                            </form>
+                            <form action="/Admin/RemovePrinter" method="post"
+                                  onsubmit="return confirm('Remover a impressora @printer.Name.Replace("'", "") do painel? O histórico de impressões é mantido.');">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@printer.Id" />
+                                <button type="submit" class="btn-action btn-remove" title="Remover impressora">Remover</button>
+                            </form>
+                        </div>
                     </div>
                 }
             </div>
@@ -126,7 +134,8 @@
                             <span class="file-tag">@job.FileName</span>
                             @if (!string.IsNullOrWhiteSpace(job.LastError)) { <small class="job-error">@job.LastError</small> }
                         </td>
-                        <td>@(job.RequiresPrinterAttention ? "Sem impressora compatível" : job.PrinterName ?? "Distribuição pendente")</td>
+                        <td>@(job.RequiresPrinterAttention ? "Sem impressora compatível"
+                              : job.PrinterName ?? (job.Status == PrintJobStatus.Pending ? "Distribuição pendente" : "Impressora removida"))</td>
                         <td>
                             @if (job.RequiresPrinterAttention)
                             {

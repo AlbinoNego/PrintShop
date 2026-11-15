@@ -121,6 +121,63 @@ public class QueueAndPrintJobTests : IDisposable
         Assert.Equal(PrintJobStatus.Failed, _jobs.GetRecentJobs().Single().Status);
     }
 
+    [Fact]
+    public void Nao_cadastra_a_mesma_impressora_do_windows_duas_vezes()
+    {
+        _jobs.AddPrinter(new PrinterDefinition { Name = "Preto e branco", SystemName = "Brother HL-5370DW series" });
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            _jobs.AddPrinter(new PrinterDefinition { Name = "Outra", SystemName = "brother hl-5370dw series " }));
+
+        Assert.Contains("Preto e branco", error.Message);
+        Assert.Single(_jobs.GetPrinters());
+    }
+
+    [Fact]
+    public void Nao_cadastra_dois_nomes_iguais_no_painel()
+    {
+        _jobs.AddPrinter(new PrinterDefinition { Name = "Preto e branco", SystemName = "Brother" });
+
+        Assert.Throws<ArgumentException>(() =>
+            _jobs.AddPrinter(new PrinterDefinition { Name = "preto e branco", SystemName = "HP" }));
+    }
+
+    [Fact]
+    public async Task Remove_impressora_e_mantem_o_historico_de_trabalhos()
+    {
+        var order = await AddPaidOrderAsync((1, 1));
+        await _jobs.EnqueueOrderAsync(order);
+        _jobs.AddPrinter(new PrinterDefinition { Name = "Laser", SystemName = "L" });
+        var job = await _jobs.TryClaimNextJobAsync();
+        await _jobs.CompleteJobAsync(job!.Id, success: true);
+        var printerId = _jobs.GetPrinters().Single().Id;
+
+        Assert.Equal(PrinterRemovalResult.Removed, _jobs.RemovePrinter(printerId));
+
+        Assert.Empty(_jobs.GetPrinters());
+        var history = _jobs.GetRecentJobs().Single();
+        Assert.Equal(PrintJobStatus.Printed, history.Status);
+        Assert.Null(history.PrinterId);
+    }
+
+    [Fact]
+    public async Task Nao_remove_impressora_que_esta_imprimindo()
+    {
+        var order = await AddPaidOrderAsync((1, 1));
+        await _jobs.EnqueueOrderAsync(order);
+        _jobs.AddPrinter(new PrinterDefinition { Name = "Laser", SystemName = "L" });
+        await _jobs.TryClaimNextJobAsync();
+
+        Assert.Equal(PrinterRemovalResult.Printing, _jobs.RemovePrinter(_jobs.GetPrinters().Single().Id));
+        Assert.Single(_jobs.GetPrinters());
+    }
+
+    [Fact]
+    public void Remover_impressora_inexistente_avisa()
+    {
+        Assert.Equal(PrinterRemovalResult.NotFound, _jobs.RemovePrinter("nao-existe"));
+    }
+
     private async Task<PrintOrder> AddPaidOrderAsync(params (int Pages, int Copies)[] files)
     {
         var order = TestStorage.Order(files);

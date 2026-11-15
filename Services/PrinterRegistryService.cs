@@ -140,12 +140,32 @@ public class PrinterRegistryService
 
         using var connection = CreateConnection();
         connection.Open();
+
+        using (var check = connection.CreateCommand())
+        {
+            check.CommandText = """
+                SELECT Name FROM Printers
+                WHERE SystemName = $systemName COLLATE NOCASE OR Name = $name COLLATE NOCASE
+                LIMIT 1;
+                """;
+            check.Parameters.AddWithValue("$systemName", printer.SystemName.Trim());
+            check.Parameters.AddWithValue("$name", printer.Name.Trim());
+            if (check.ExecuteScalar() is string existing)
+            {
+                throw new ArgumentException($"Já existe uma impressora cadastrada com este nome ou com esta impressora do Windows (\"{existing}\").");
+            }
+        }
+
         using var command = connection.CreateCommand();
+        // O NOT EXISTS repete a checagem dentro do INSERT: dois cliques seguidos nao criam duas linhas.
         command.CommandText = """
             INSERT INTO Printers
                 (Id, Name, SystemName, IsActive, IsPaused, SupportsColor, SupportsA3, SupportsDuplex, CreatedAt)
-            VALUES
-                ($id, $name, $systemName, $isActive, $isPaused, $supportsColor, $supportsA3, $supportsDuplex, $createdAt);
+            SELECT $id, $name, $systemName, $isActive, $isPaused, $supportsColor, $supportsA3, $supportsDuplex, $createdAt
+            WHERE NOT EXISTS (
+                SELECT 1 FROM Printers
+                WHERE SystemName = $systemName COLLATE NOCASE OR Name = $name COLLATE NOCASE
+            );
             """;
         command.Parameters.AddWithValue("$id", printer.Id);
         command.Parameters.AddWithValue("$name", printer.Name.Trim());
@@ -156,7 +176,38 @@ public class PrinterRegistryService
         command.Parameters.AddWithValue("$supportsA3", printer.SupportsA3 ? 1 : 0);
         command.Parameters.AddWithValue("$supportsDuplex", printer.SupportsDuplex ? 1 : 0);
         command.Parameters.AddWithValue("$createdAt", printer.CreatedAt.ToString("O"));
-        command.ExecuteNonQuery();
+        if (command.ExecuteNonQuery() == 0)
+        {
+            throw new ArgumentException("Esta impressora acabou de ser cadastrada.");
+        }
+    }
+
+    public PrinterRemovalResult RemovePrinter(string printerId)
+    {
+        using var connection = CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        using (var busy = connection.CreateCommand())
+        {
+            busy.Transaction = transaction;
+            busy.CommandText = "SELECT COUNT(1) FROM PrintJobs WHERE PrinterId = $id AND Status = $processing;";
+            busy.Parameters.AddWithValue("$id", printerId);
+            busy.Parameters.AddWithValue("$processing", (int)PrintJobStatus.Processing);
+            if (Convert.ToInt32(busy.ExecuteScalar()) > 0)
+            {
+                return PrinterRemovalResult.Printing;
+            }
+        }
+
+        // Trabalhos antigos ficam no historico com PrinterId nulo (ON DELETE SET NULL).
+        using var delete = connection.CreateCommand();
+        delete.Transaction = transaction;
+        delete.CommandText = "DELETE FROM Printers WHERE Id = $id;";
+        delete.Parameters.AddWithValue("$id", printerId);
+        var removed = delete.ExecuteNonQuery() == 1;
+        transaction.Commit();
+        return removed ? PrinterRemovalResult.Removed : PrinterRemovalResult.NotFound;
     }
 
     public void TogglePause(string printerId)
@@ -520,5 +571,25 @@ public class PrinterRegistryService
             );
             """;
         command.ExecuteNonQuery();
+
+        // Garante no banco que a mesma impressora do Windows nao seja cadastrada duas vezes.
+        // Bancos que ja tem duplicadas ficam sem o indice ate o admin remove-las; o proximo
+        // inicio do site cria o indice.
+        try
+        {
+            using var unique = connection.CreateCommand();
+            unique.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS UX_Printers_SystemName ON Printers(SystemName COLLATE NOCASE);";
+            unique.ExecuteNonQuery();
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+        {
+        }
     }
+}
+
+public enum PrinterRemovalResult
+{
+    Removed,
+    NotFound,
+    Printing
 }

@@ -879,6 +879,10 @@ main { flex: 1; padding: 2.5rem; max-width: 1100px; margin: 0 auto; width: 100%;
 .report-presets a:hover { border-color: var(--ink); color: var(--ink); }
 .audit-filter { grid-template-columns: 1fr auto auto; }
 .audit-details { max-width: 360px; font-size: .82rem; color: var(--ink-soft); word-break: break-word; }
+.printer-actions { display: flex; flex-direction: column; gap: .4rem; align-items: stretch; }
+.printer-actions .btn-action { width: 100%; }
+.btn-remove { background: none; color: #b91c1c; border: 1px solid #fecaca; }
+.btn-remove:hover { background: #fee2e2; }
 .error-icon { background: #fee2e2; color: #dc2626; font-weight: 700; }
 .file-link { text-decoration: none; color: inherit; }
 .file-link:hover { border-color: var(--ink); }

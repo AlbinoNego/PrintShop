@@ -226,6 +226,29 @@ public class AdminController : Controller
     }
 
     [HttpPost]
+    public IActionResult RemovePrinter(string id)
+    {
+        if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
+
+        var printer = _printerRegistry.GetPrinters().FirstOrDefault(item => item.Id == id);
+        switch (_printerRegistry.RemovePrinter(id))
+        {
+            case PrinterRemovalResult.Removed:
+                _audit.Log(HttpContext, "Removeu impressora", printer?.Name ?? id, $"Windows: {printer?.SystemName}");
+                TempData["Success"] = $"Impressora \"{printer?.Name}\" removida.";
+                break;
+            case PrinterRemovalResult.Printing:
+                TempData["Error"] = "Esta impressora está imprimindo agora. Pause-a e aguarde o trabalho terminar antes de remover.";
+                break;
+            default:
+                TempData["Error"] = "Impressora não encontrada.";
+                break;
+        }
+
+        return RedirectToAction(nameof(Printers));
+    }
+
+    [HttpPost]
     public async Task<IActionResult> RetryPrintJob(long id)
     {
         if (!AdminAuthService.IsLoggedIn(HttpContext)) return Unauthorized();
